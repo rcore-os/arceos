@@ -70,6 +70,8 @@ members = [
     "apps/task/yield",
     "apps/task/priority",
     "apps/task/tls",
+
+    "variants/monolithic",
 ]
 
 [profile.release]

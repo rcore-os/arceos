@@ -120,6 +120,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "arceos-monolithic"
+version = "0.1.0"
+dependencies = [
+ "axhal",
+ "axlog",
+ "axstd",
+ "memory_addr",
+]
+
+[[package]]
 name = "arceos-parallel"
 version = "0.1.0"
 dependencies = [
@@ -388,6 +398,7 @@ dependencies = [
  "raw-cpuid 11.0.1",
  "riscv",
  "sbi-rt",
+ "spin 0.9.8",
  "spinlock",
  "static_assertions",
  "tock-registers",

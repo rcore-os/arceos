@@ -30,7 +30,7 @@ endef
 clippy_args := -A clippy::new_without_default
 
 define cargo_clippy
-  $(call run_cmd,cargo clippy,--all-features --workspace --exclude axlog $(1) $(verbose) -- $(clippy_args))
+  $(call run_cmd,cargo clippy,--all-features --workspace --exclude axlog --exclude arceos-monolithic $(1) $(verbose) -- $(clippy_args))
   $(call run_cmd,cargo clippy,-p axlog -p percpu -p percpu_macros $(1) $(verbose) -- $(clippy_args))
 endef
 

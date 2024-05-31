@@ -1,0 +1,10 @@
+[package]
+name = "arceos-monolithic"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axstd = { path = "../../ulib/axstd", features = ["paging"] }
+axlog = { path = "../../modules/axlog" }
+axhal = { path = "../../modules/axhal", features = ["uspace"] }
+memory_addr = { path = "../../crates/memory_addr" }

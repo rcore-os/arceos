@@ -4,11 +4,14 @@ use super::context::TrapFrame;
 
 core::arch::global_asm!(include_str!("trap.S"));
 
+#[cfg(feature = "uspace")]
+const LEGACY_SYSCALL_VECTOR: u8 = 0x80;
+
 const IRQ_VECTOR_START: u8 = 0x20;
 const IRQ_VECTOR_END: u8 = 0xff;
 
 #[no_mangle]
-fn x86_trap_handler(tf: &TrapFrame) {
+fn x86_trap_handler(tf: &mut TrapFrame) {
     match tf.vector as u8 {
         PAGE_FAULT_VECTOR => {
             if tf.is_user() {
@@ -35,12 +38,26 @@ fn x86_trap_handler(tf: &TrapFrame) {
                 tf.rip, tf.error_code, tf
             );
         }
+        #[cfg(feature = "uspace")]
+        LEGACY_SYSCALL_VECTOR => super::syscall::x86_syscall_handler(tf),
         IRQ_VECTOR_START..=IRQ_VECTOR_END => crate::trap::handle_irq_extern(tf.vector as _),
         _ => {
             panic!(
-                "Unhandled exception {} (error_code = {:#x}) @ {:#x}:\n{:#x?}",
-                tf.vector, tf.error_code, tf.rip, tf
+                "Unhandled exception {} ({}, error_code = {:#x}) @ {:#x}:\n{:#x?}",
+                tf.vector,
+                vec_to_str(tf.vector),
+                tf.error_code,
+                tf.rip,
+                tf
             );
         }
+    }
+}
+
+fn vec_to_str(vec: u64) -> &'static str {
+    if vec < 32 {
+        EXCEPTIONS[vec as usize].mnemonic
+    } else {
+        "Unknown"
     }
 }

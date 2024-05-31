@@ -1,10 +1,18 @@
 use core::fmt;
+use spin::Once;
 
 use x86_64::instructions::tables::{lgdt, load_tss};
 use x86_64::registers::segmentation::{Segment, SegmentSelector, CS};
 use x86_64::structures::gdt::{Descriptor, DescriptorFlags};
 use x86_64::structures::{tss::TaskStateSegment, DescriptorTablePointer};
 use x86_64::{addr::VirtAddr, PrivilegeLevel};
+
+#[no_mangle]
+#[percpu::def_percpu]
+static TSS: Once<TaskStateSegment> = Once::new();
+
+#[percpu::def_percpu]
+static GDT: Once<GdtStruct> = Once::new();
 
 /// A wrapper of the Global Descriptor Table (GDT) with maximum 16 entries.
 #[repr(align(16))]
@@ -85,4 +93,27 @@ impl fmt::Debug for GdtStruct {
             .field("table", &self.table)
             .finish()
     }
+}
+
+/// Initializes the per-CPU TSS and GDT structures and loads them into the
+/// current CPU.
+pub fn init_gdt() {
+    unsafe {
+        let tss = TSS.current_ref_raw();
+        let gdt = GDT.current_ref_raw();
+        let tss = tss.call_once(TaskStateSegment::new);
+        let gdt = gdt.call_once(|| GdtStruct::new(tss));
+        gdt.load();
+        gdt.load_tss();
+    }
+}
+
+/// Sets the stack pointer for privilege level 0 (RSP0) of the current TSS.
+///
+/// # Safety
+///
+/// Must be called after initialization and preemption is disabled.
+pub unsafe fn tss_set_rsp0(rsp0: memory_addr::VirtAddr) {
+    let tss = unsafe { TSS.current_ref_mut_raw().get_mut_unchecked() };
+    tss.privilege_stack_table[0] = x86_64::VirtAddr::new(rsp0.as_usize() as u64);
 }

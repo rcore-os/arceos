@@ -73,6 +73,32 @@ pub unsafe fn set_current_task_ptr<T>(ptr: *const T) {
     }
 }
 
+fn cpu_init_percpu() {
+    use crate::arch::*;
+    #[cfg(target_arch = "x86_64")]
+    {
+        init_gdt();
+        init_idt();
+        #[cfg(feature = "uspace")]
+        init_syscall();
+    }
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+    {
+        extern "C" {
+            fn trap_vector_base();
+        }
+        set_trap_vector_base(trap_vector_base as usize);
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        extern "C" {
+            fn exception_vector_base();
+        }
+        set_exception_vector_base(exception_vector_base as usize);
+        unsafe { write_page_table_root0(0.into()) }; // disable low address access
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) fn init_primary(cpu_id: usize) {
     percpu::init(axconfig::SMP);
@@ -81,6 +107,7 @@ pub(crate) fn init_primary(cpu_id: usize) {
         CPU_ID.write_current_raw(cpu_id);
         IS_BSP.write_current_raw(true);
     }
+    cpu_init_percpu();
 }
 
 #[allow(dead_code)]
@@ -90,4 +117,5 @@ pub(crate) fn init_secondary(cpu_id: usize) {
         CPU_ID.write_current_raw(cpu_id);
         IS_BSP.write_current_raw(false);
     }
+    cpu_init_percpu();
 }

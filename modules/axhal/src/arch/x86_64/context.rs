@@ -1,10 +1,16 @@
 use core::{arch::asm, fmt};
 use memory_addr::VirtAddr;
 
+#[cfg(feature = "irq")]
+use x86_64::registers::rflags::RFlags;
+
+#[cfg(feature = "uspace")]
+use super::gdt::GdtStruct;
+
 /// Saved registers when a trap (interrupt or exception) occurs.
 #[allow(missing_docs)]
 #[repr(C)]
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct TrapFrame {
     pub rax: u64,
     pub rcx: u64,
@@ -38,6 +44,77 @@ impl TrapFrame {
     /// Whether the trap is from userspace.
     pub const fn is_user(&self) -> bool {
         self.cs & 0b11 == 3
+    }
+}
+
+/// Context to enter user space.
+#[cfg(feature = "uspace")]
+pub struct UspaceContext(TrapFrame);
+
+#[cfg(feature = "uspace")]
+impl UspaceContext {
+    /// Creates a new context with the given entry point, user stack pointer,
+    /// and the argument.
+    pub fn new(entry: usize, ustack_top: VirtAddr, arg0: usize) -> Self {
+        Self(TrapFrame {
+            rdi: arg0 as _,
+            rip: entry as _,
+            cs: GdtStruct::UCODE64_SELECTOR.0 as _,
+            #[cfg(feature = "irq")]
+            rflags: RFlags::INTERRUPT_FLAG.bits(), // IOPL = 0, IF = 1
+            rsp: ustack_top.as_usize() as _,
+            ss: GdtStruct::UDATA_SELECTOR.0 as _,
+            ..Default::default()
+        })
+    }
+
+    /// Creates a new context from the given [`TrapFrame`].
+    ///
+    /// It copies almost all registers except `CS` and `SS` which need to be
+    /// set to the user segment selectors.
+    pub const fn from(tf: &TrapFrame) -> Self {
+        let mut tf = *tf;
+        tf.cs = GdtStruct::UCODE64_SELECTOR.0 as _;
+        tf.ss = GdtStruct::UDATA_SELECTOR.0 as _;
+        Self(tf)
+    }
+
+    /// Enters user space.
+    ///
+    /// It restores the user registers and jumps to the user entry point
+    /// (saved in `rip`).
+    /// When an exception or syscall occurs, the kernel stack pointer is
+    /// switched to `kstack_top`.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because it changes processor mode and the stack.
+    pub unsafe fn enter_uspace(&self, kstack_top: VirtAddr) -> ! {
+        super::disable_irqs();
+        super::tss_set_rsp0(kstack_top);
+        asm!("
+            mov     rsp, {tf}
+            pop     rax
+            pop     rcx
+            pop     rdx
+            pop     rbx
+            pop     rbp
+            pop     rsi
+            pop     rdi
+            pop     r8
+            pop     r9
+            pop     r10
+            pop     r11
+            pop     r12
+            pop     r13
+            pop     r14
+            pop     r15
+            add     rsp, 16     // skip vector, error_code
+            swapgs
+            iretq",
+            tf = in(reg) &self.0,
+            options(noreturn),
+        )
     }
 }
 
