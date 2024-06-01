@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 axstd = { path = "../../ulib/axstd", features = ["paging"] }
-axlog = { path = "../../modules/axlog" }
 axhal = { path = "../../modules/axhal", features = ["uspace"] }
+axlog = { path = "../../modules/axlog" }
+axconfig = { path = "../../modules/axconfig" }
+axruntime = { path = "../../modules/axruntime" }
 memory_addr = { path = "../../crates/memory_addr" }

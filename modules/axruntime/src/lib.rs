@@ -230,12 +230,13 @@ fn init_allocator() {
 }
 
 #[cfg(feature = "paging")]
+pub static KERNEL_PAGE_TABLE: lazy_init::LazyInit<axhal::paging::PageTable> =
+    lazy_init::LazyInit::new();
+
+#[cfg(feature = "paging")]
 fn remap_kernel_memory() -> Result<(), axhal::paging::PagingError> {
     use axhal::mem::{memory_regions, phys_to_virt};
-    use axhal::paging::{MappingFlags, PageTable};
-    use lazy_init::LazyInit;
-
-    static KERNEL_PAGE_TABLE: LazyInit<PageTable> = LazyInit::new();
+    use axhal::paging::PageTable;
 
     if axhal::cpu::this_cpu_is_bsp() {
         let mut kernel_page_table = PageTable::try_new()?;
@@ -244,7 +245,7 @@ fn remap_kernel_memory() -> Result<(), axhal::paging::PagingError> {
                 phys_to_virt(r.paddr),
                 r.paddr,
                 r.size,
-                MappingFlags::from(r.flags) | MappingFlags::USER,
+                r.flags.into(),
                 true,
             )?;
         }

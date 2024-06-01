@@ -123,8 +123,10 @@ dependencies = [
 name = "arceos-monolithic"
 version = "0.1.0"
 dependencies = [
+ "axconfig",
  "axhal",
  "axlog",
+ "axruntime",
  "axstd",
  "memory_addr",
 ]

@@ -239,12 +239,37 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         F: Fn(usize, usize, VirtAddr, &PTE),
     {
         self.walk_recursive(
-            self.table_of(self.root_paddr()),
+            Self::table_of(self.root_paddr()),
             0,
             VirtAddr::from(0),
             limit,
             func,
         )
+    }
+
+    /// Shallow clone the page table, keeping only the given virtual memory
+    /// region.
+    pub fn clone_shallow(&self, start: VirtAddr, size: usize) -> PagingResult<Self> {
+        let pt = Self::try_new()?;
+        if size == 0 {
+            return Ok(pt);
+        }
+
+        let src_table = Self::table_of(self.root_paddr);
+        let dst_table = Self::table_of_mut(pt.root_paddr);
+        let index_fn = if M::LEVELS == 3 {
+            p3_index
+        } else if M::LEVELS == 4 {
+            p4_index
+        } else {
+            unreachable!()
+        };
+        let start_idx = index_fn(start);
+        let end_idx = index_fn(start + size - 1) + 1;
+        assert!(start_idx < ENTRY_COUNT);
+        assert!(end_idx <= ENTRY_COUNT);
+        dst_table[start_idx..end_idx].copy_from_slice(&src_table[start_idx..end_idx]);
+        Ok(pt)
     }
 }
 
@@ -260,12 +285,12 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         }
     }
 
-    fn table_of<'a>(&self, paddr: PhysAddr) -> &'a [PTE] {
+    fn table_of<'a>(paddr: PhysAddr) -> &'a [PTE] {
         let ptr = IF::phys_to_virt(paddr).as_ptr() as _;
         unsafe { core::slice::from_raw_parts(ptr, ENTRY_COUNT) }
     }
 
-    fn table_of_mut<'a>(&self, paddr: PhysAddr) -> &'a mut [PTE] {
+    fn table_of_mut<'a>(paddr: PhysAddr) -> &'a mut [PTE] {
         let ptr = IF::phys_to_virt(paddr).as_mut_ptr() as _;
         unsafe { core::slice::from_raw_parts_mut(ptr, ENTRY_COUNT) }
     }
@@ -276,7 +301,7 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         } else if entry.is_huge() {
             Err(PagingError::MappedToHugePage)
         } else {
-            Ok(self.table_of_mut(entry.paddr()))
+            Ok(Self::table_of_mut(entry.paddr()))
         }
     }
 
@@ -285,7 +310,7 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
             let paddr = Self::alloc_table()?;
             self.intrm_tables.push(paddr);
             *entry = GenericPTE::new_table(paddr);
-            Ok(self.table_of_mut(paddr))
+            Ok(Self::table_of_mut(paddr))
         } else {
             self.next_table_mut(entry)
         }
@@ -293,9 +318,9 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
 
     fn get_entry_mut(&self, vaddr: VirtAddr) -> PagingResult<(&mut PTE, PageSize)> {
         let p3 = if M::LEVELS == 3 {
-            self.table_of_mut(self.root_paddr())
+            Self::table_of_mut(self.root_paddr())
         } else if M::LEVELS == 4 {
-            let p4 = self.table_of_mut(self.root_paddr());
+            let p4 = Self::table_of_mut(self.root_paddr());
             let p4e = &mut p4[p4_index(vaddr)];
             self.next_table_mut(p4e)?
         } else {
@@ -323,9 +348,9 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         page_size: PageSize,
     ) -> PagingResult<&mut PTE> {
         let p3 = if M::LEVELS == 3 {
-            self.table_of_mut(self.root_paddr())
+            Self::table_of_mut(self.root_paddr())
         } else if M::LEVELS == 4 {
-            let p4 = self.table_of_mut(self.root_paddr());
+            let p4 = Self::table_of_mut(self.root_paddr());
             let p4e = &mut p4[p4_index(vaddr)];
             self.next_table_mut_or_create(p4e)?
         } else {
