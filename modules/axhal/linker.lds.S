@@ -29,6 +29,11 @@ SECTIONS
         _sdata = .;
         *(.data.boot_page_table)
         . = ALIGN(4K);
+
+        __start_ax_task_ext = .;
+        *(ax_task_ext)
+        __stop_ax_task_ext = .;
+
         *(.data .data.*)
         *(.sdata .sdata.*)
         *(.got .got.*)
@@ -53,13 +58,9 @@ SECTIONS
         _percpu_load_start = .;
         *(.percpu .percpu.*)
         _percpu_load_end = .;
-        . = ALIGN(64);
-        _percpu_size_aligned = .;
-
-        . = _percpu_load_start + _percpu_size_aligned * %SMP%;
+        . = _percpu_load_start + ALIGN(64) * %SMP%;
     }
     . = _percpu_start + SIZEOF(.percpu);
-    _percpu_end = .;
 
     . = ALIGN(4K);
     _edata = .;

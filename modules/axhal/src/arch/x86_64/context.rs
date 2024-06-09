@@ -1,7 +1,7 @@
 use core::{arch::asm, fmt};
 use memory_addr::VirtAddr;
 
-#[cfg(feature = "irq")]
+#[cfg(all(feature = "irq", feature = "uspace"))]
 use x86_64::registers::rflags::RFlags;
 
 #[cfg(feature = "uspace")]

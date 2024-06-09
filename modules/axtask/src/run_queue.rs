@@ -214,6 +214,7 @@ fn gc_entry() {
 }
 
 pub(crate) fn init() {
+    // Put the subsequent execution into the `main` task.
     const IDLE_TASK_STACK_SIZE: usize = 4096;
     let idle_task = TaskInner::new(|| crate::run_idle(), "idle".into(), IDLE_TASK_STACK_SIZE);
     IDLE_TASK.with_current(|i| i.init_by(idle_task.clone()));
@@ -226,6 +227,7 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn init_secondary() {
+    // Put the subsequent execution into the `idle` task.
     let idle_task = TaskInner::new_init("idle".into());
     idle_task.set_state(TaskState::Running);
     IDLE_TASK.with_current(|i| i.init_by(idle_task.clone()));

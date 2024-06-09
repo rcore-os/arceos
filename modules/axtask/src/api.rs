@@ -7,6 +7,8 @@ pub(crate) use crate::run_queue::{AxRunQueue, RUN_QUEUE};
 #[doc(cfg(feature = "multitask"))]
 pub use crate::task::{CurrentTask, TaskId, TaskInner};
 #[doc(cfg(feature = "multitask"))]
+pub use crate::task_ext::{TaskExtMut, TaskExtRef};
+#[doc(cfg(feature = "multitask"))]
 pub use crate::wait_queue::WaitQueue;
 
 /// The reference type of a task.

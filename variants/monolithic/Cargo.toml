@@ -8,5 +8,6 @@ axstd = { path = "../../ulib/axstd", features = ["paging"] }
 axhal = { path = "../../modules/axhal", features = ["uspace"] }
 axlog = { path = "../../modules/axlog" }
 axconfig = { path = "../../modules/axconfig" }
-axruntime = { path = "../../modules/axruntime" }
+axtask = { path = "../../modules/axtask" }
+axruntime = { path = "../../modules/axruntime", features = ["multitask"] }
 memory_addr = { path = "../../crates/memory_addr" }

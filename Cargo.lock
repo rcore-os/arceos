@@ -128,6 +128,7 @@ dependencies = [
  "axlog",
  "axruntime",
  "axstd",
+ "axtask",
  "memory_addr",
 ]
 

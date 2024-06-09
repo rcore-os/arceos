@@ -12,6 +12,7 @@ use axhal::tls::TlsArea;
 use axhal::arch::TaskContext;
 use memory_addr::{align_up_4k, VirtAddr};
 
+use crate::task_ext::AxTaskExt;
 use crate::{AxRunQueue, AxTask, AxTaskRef, WaitQueue};
 
 /// A unique identifier for a thread.
@@ -52,6 +53,7 @@ pub struct TaskInner {
 
     kstack: Option<TaskStack>,
     ctx: UnsafeCell<TaskContext>,
+    task_ext: AxTaskExt,
 
     #[cfg(feature = "tls")]
     tls: TlsArea,
@@ -109,6 +111,19 @@ impl TaskInner {
             .wait_until(|| self.state() == TaskState::Exited);
         Some(self.exit_code.load(Ordering::Acquire))
     }
+
+    /// Returns the pointer to the user-defined task extended data.
+    ///
+    /// # Safety
+    ///
+    /// The caller should not access the pointer directly, use [`TaskExtRef::task_ext`]
+    /// or [`TaskExtMut::task_ext_mut`] instead.
+    ///
+    /// [`TaskExtRef::task_ext`]: crate::task_ext::TaskExtRef::task_ext
+    /// [`TaskExtMut::task_ext_mut`]: crate::task_ext::TaskExtMut::task_ext_mut
+    pub unsafe fn task_ext_ptr(&self) -> *mut u8 {
+        self.task_ext.as_ptr()
+    }
 }
 
 // private methods
@@ -132,6 +147,7 @@ impl TaskInner {
             wait_for_exit: WaitQueue::new(),
             kstack: None,
             ctx: UnsafeCell::new(TaskContext::new()),
+            task_ext: AxTaskExt::alloc(),
             #[cfg(feature = "tls")]
             tls: TlsArea::alloc(),
         }

@@ -28,6 +28,7 @@
 #![cfg_attr(not(test), no_std)]
 #![feature(doc_cfg)]
 #![feature(doc_auto_cfg)]
+#![feature(linkage)]
 
 #[cfg(test)]
 mod tests;
@@ -40,6 +41,7 @@ cfg_if::cfg_if! {
 
         mod run_queue;
         mod task;
+        mod task_ext;
         mod api;
         mod wait_queue;
 

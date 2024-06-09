@@ -6,12 +6,15 @@ extern crate axlog;
 extern crate alloc;
 extern crate axstd;
 
+mod task;
+
 use memory_addr::VirtAddr;
 
 use axhal::arch::UspaceContext;
 use axhal::mem::virt_to_phys;
 use axhal::paging::MappingFlags;
 use axruntime::KERNEL_PAGE_TABLE;
+use axtask::TaskExtRef;
 
 const USER_STACK_SIZE: usize = 4096;
 
@@ -73,6 +76,12 @@ fn run_apps() -> ! {
     .unwrap();
 
     let ctx = UspaceContext::new(entry_vaddr.into(), ustack_top, 2333);
+    let pid = axtask::current().task_ext().proc_id;
+    let parent = axtask::current().task_ext().parent;
+    warn!("pid = {}", pid);
+    warn!("parent = {}", parent);
+    assert_eq!(pid, 233);
+    assert_eq!(parent, 456);
 
     info!(
         "Enter user space: entry={:#x}, ustack={:#x}, kstack={:#x}",
@@ -81,7 +90,7 @@ fn run_apps() -> ! {
     unsafe {
         axhal::arch::write_page_table_root(pt.root_paddr());
         ctx.enter_uspace(kstack_top)
-    };
+    }
 }
 
 #[no_mangle]
