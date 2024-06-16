@@ -8,15 +8,16 @@ extern crate axstd;
 
 mod task;
 
-use memory_addr::VirtAddr;
+use memory_addr::{PhysAddr, VirtAddr};
 
-use axhal::arch::UspaceContext;
+use axhal::arch::{TrapFrame, UspaceContext};
 use axhal::mem::virt_to_phys;
 use axhal::paging::MappingFlags;
 use axruntime::KERNEL_PAGE_TABLE;
-use axtask::TaskExtRef;
+use axtask::{AxTaskRef, TaskExtMut, TaskExtRef, TaskInner};
 
 const USER_STACK_SIZE: usize = 4096;
+const KERNEL_STACK_SIZE: usize = 0x40000; // 256 KiB
 
 fn app_main(arg0: usize) {
     unsafe {
@@ -36,6 +37,37 @@ fn app_main(arg0: usize) {
     }
 }
 
+fn spawn_user_task(page_table_root: PhysAddr, uctx: UspaceContext) -> AxTaskRef {
+    let mut task = TaskInner::new(
+        || {
+            let curr = axtask::current();
+            let kstack_top = curr.kernel_stack_top().unwrap();
+            info!(
+                "Enter user space: entry={:#x}, ustack={:#x}, kstack={:#x}",
+                curr.task_ext().uctx.get_ip(),
+                curr.task_ext().uctx.get_sp(),
+                kstack_top,
+            );
+            unsafe { curr.task_ext().uctx.enter_uspace(kstack_top) };
+        },
+        "".into(),
+        KERNEL_STACK_SIZE,
+    );
+    task.task_ext_mut().page_table_root = page_table_root;
+    task.task_ext_mut().uctx = uctx;
+    task.ctx_mut().set_page_table_root(page_table_root);
+    axtask::spawn_task(task)
+}
+
+fn sys_clone(tf: &TrapFrame, newsp: usize) -> usize {
+    let page_table_root = axtask::current().task_ext().page_table_root;
+    let mut uctx = UspaceContext::from(tf);
+    uctx.set_sp(newsp);
+    uctx.set_ret_reg(0);
+    let new_task = spawn_user_task(page_table_root, uctx);
+    new_task.id().as_u64() as usize
+}
+
 fn run_apps() -> ! {
     let entry = VirtAddr::from(app_main as usize);
     let entry_paddr_align = virt_to_phys(entry.align_down_4k());
@@ -47,10 +79,6 @@ fn run_apps() -> ! {
     let ustack_paddr = virt_to_phys(VirtAddr::from(ustack as _));
     let ustack_top = VirtAddr::from(0x7fff_0000);
     let ustack_vaddr = ustack_top - USER_STACK_SIZE;
-
-    let kstack_top: usize;
-    unsafe { core::arch::asm!("mov {}, rsp", out(reg) kstack_top) };
-    let kstack_top = VirtAddr::align_down(kstack_top.into(), 16usize);
 
     let kspace_base = VirtAddr::from(axconfig::PHYS_VIRT_OFFSET);
     let kspace_size = 0x7f_ffff_f000;
@@ -75,22 +103,13 @@ fn run_apps() -> ! {
     )
     .unwrap();
 
-    let ctx = UspaceContext::new(entry_vaddr.into(), ustack_top, 2333);
-    let pid = axtask::current().task_ext().proc_id;
-    let parent = axtask::current().task_ext().parent;
-    warn!("pid = {}", pid);
-    warn!("parent = {}", parent);
-    assert_eq!(pid, 233);
-    assert_eq!(parent, 456);
-
-    info!(
-        "Enter user space: entry={:#x}, ustack={:#x}, kstack={:#x}",
-        entry_vaddr, ustack_top, kstack_top,
+    spawn_user_task(
+        pt.root_paddr(),
+        UspaceContext::new(entry_vaddr.into(), ustack_top, 2333),
     );
-    unsafe {
-        axhal::arch::write_page_table_root(pt.root_paddr());
-        ctx.enter_uspace(kstack_top)
-    }
+
+    axtask::WaitQueue::new().wait();
+    unreachable!()
 }
 
 #[no_mangle]

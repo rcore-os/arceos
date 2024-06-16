@@ -1,5 +1,5 @@
 use core::fmt;
-use spin::Once;
+use lazy_init::LazyInit;
 
 use x86_64::instructions::tables::{lgdt, load_tss};
 use x86_64::registers::segmentation::{Segment, SegmentSelector, CS};
@@ -9,10 +9,10 @@ use x86_64::{addr::VirtAddr, PrivilegeLevel};
 
 #[no_mangle]
 #[percpu::def_percpu]
-static TSS: Once<TaskStateSegment> = Once::new();
+static TSS: TaskStateSegment = TaskStateSegment::new();
 
 #[percpu::def_percpu]
-static GDT: Once<GdtStruct> = Once::new();
+static GDT: LazyInit<GdtStruct> = LazyInit::new();
 
 /// A wrapper of the Global Descriptor Table (GDT) with maximum 16 entries.
 #[repr(align(16))]
@@ -99,13 +99,17 @@ impl fmt::Debug for GdtStruct {
 /// current CPU.
 pub fn init_gdt() {
     unsafe {
-        let tss = TSS.current_ref_raw();
         let gdt = GDT.current_ref_raw();
-        let tss = tss.call_once(TaskStateSegment::new);
-        let gdt = gdt.call_once(|| GdtStruct::new(tss));
+        gdt.init_by(GdtStruct::new(TSS.current_ref_raw()));
         gdt.load();
         gdt.load_tss();
     }
+}
+
+/// Returns the stack pointer for privilege level 0 (RSP0) of the current TSS.
+pub fn tss_get_rsp0() -> memory_addr::VirtAddr {
+    let tss = unsafe { TSS.current_ref_raw() };
+    memory_addr::VirtAddr::from(tss.privilege_stack_table[0].as_u64() as usize)
 }
 
 /// Sets the stack pointer for privilege level 0 (RSP0) of the current TSS.
@@ -114,6 +118,6 @@ pub fn init_gdt() {
 ///
 /// Must be called after initialization and preemption is disabled.
 pub unsafe fn tss_set_rsp0(rsp0: memory_addr::VirtAddr) {
-    let tss = unsafe { TSS.current_ref_mut_raw().get_mut_unchecked() };
-    tss.privilege_stack_table[0] = x86_64::VirtAddr::new(rsp0.as_usize() as u64);
+    let tss = unsafe { TSS.current_ref_mut_raw() };
+    tss.privilege_stack_table[0] = VirtAddr::new_truncate(rsp0.as_usize() as u64);
 }

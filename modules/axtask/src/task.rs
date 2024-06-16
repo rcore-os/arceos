@@ -154,7 +154,7 @@ impl TaskInner {
     }
 
     /// Create a new task with the given entry function and stack size.
-    pub(crate) fn new<F>(entry: F, name: String, stack_size: usize) -> AxTaskRef
+    pub fn new<F>(entry: F, name: String, stack_size: usize) -> Self
     where
         F: FnOnce() + Send + 'static,
     {
@@ -168,12 +168,12 @@ impl TaskInner {
         let tls = VirtAddr::from(0);
 
         t.entry = Some(Box::into_raw(Box::new(entry)));
-        t.ctx.get_mut().init(task_entry as usize, kstack.top(), tls);
+        t.ctx_mut().init(task_entry as usize, kstack.top(), tls);
         t.kstack = Some(kstack);
         if t.name == "idle" {
             t.is_idle = true;
         }
-        Arc::new(AxTask::new(t))
+        t
     }
 
     /// Creates an "init task" using the current CPU states, to use as the
@@ -184,13 +184,17 @@ impl TaskInner {
     ///
     /// And there is no need to set the `entry`, `kstack` or `tls` fields, as
     /// they will be filled automatically when the task is switches out.
-    pub(crate) fn new_init(name: String) -> AxTaskRef {
+    pub(crate) fn new_init(name: String) -> Self {
         let mut t = Self::new_common(TaskId::new(), name);
         t.is_init = true;
         if t.name == "idle" {
             t.is_idle = true;
         }
-        Arc::new(AxTask::new(t))
+        t
+    }
+
+    pub(crate) fn into_arc(self) -> AxTaskRef {
+        Arc::new(AxTask::new(self))
     }
 
     #[inline]
@@ -297,6 +301,21 @@ impl TaskInner {
     pub(crate) const unsafe fn ctx_mut_ptr(&self) -> *mut TaskContext {
         self.ctx.get()
     }
+
+    /// Returns a mutable reference to the task context.
+    #[inline]
+    pub const fn ctx_mut(&mut self) -> &mut TaskContext {
+        self.ctx.get_mut()
+    }
+
+    /// Returns the top address of the kernel stack.
+    #[inline]
+    pub const fn kernel_stack_top(&self) -> Option<VirtAddr> {
+        match &self.kstack {
+            Some(s) => Some(s.top()),
+            None => None,
+        }
+    }
 }
 
 impl fmt::Debug for TaskInner {
@@ -343,6 +362,8 @@ impl Drop for TaskStack {
 use core::mem::ManuallyDrop;
 
 /// A wrapper of [`AxTaskRef`] as the current task.
+///
+/// It won't change the reference count of the task when created or dropped.
 pub struct CurrentTask(ManuallyDrop<AxTaskRef>);
 
 impl CurrentTask {
@@ -373,6 +394,7 @@ impl CurrentTask {
     }
 
     pub(crate) unsafe fn init_current(init_task: AxTaskRef) {
+        assert!(init_task.is_init());
         #[cfg(feature = "tls")]
         axhal::arch::write_thread_pointer(init_task.tls.tls_ptr() as usize);
         let ptr = Arc::into_raw(init_task);

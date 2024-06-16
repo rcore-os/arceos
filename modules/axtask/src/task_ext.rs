@@ -16,6 +16,12 @@ pub(crate) struct AxTaskExt {
 
 impl AxTaskExt {
     fn size() -> usize {
+        // In https://sourceware.org/binutils/docs/ld/Input-Section-Example.html:
+        //
+        // If an output section’s name is the same as the input section’s name
+        // and is representable as a C identifier, then the linker will
+        // automatically see PROVIDE two symbols: __start_SECNAME and
+        // __stop_SECNAME, where SECNAME is the name of the section.
         __stop_ax_task_ext as usize - __start_ax_task_ext as usize
     }
 

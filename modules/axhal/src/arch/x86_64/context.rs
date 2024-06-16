@@ -1,10 +1,9 @@
-use core::{arch::asm, fmt};
-use memory_addr::VirtAddr;
+#![allow(unused_imports)]
 
-#[cfg(all(feature = "irq", feature = "uspace"))]
+use core::{arch::asm, fmt};
+use memory_addr::{PhysAddr, VirtAddr};
 use x86_64::registers::rflags::RFlags;
 
-#[cfg(feature = "uspace")]
 use super::gdt::GdtStruct;
 
 /// Saved registers when a trap (interrupt or exception) occurs.
@@ -53,6 +52,11 @@ pub struct UspaceContext(TrapFrame);
 
 #[cfg(feature = "uspace")]
 impl UspaceContext {
+    /// Creates an empty context with all registers set to zero.
+    pub const fn empty() -> Self {
+        unsafe { core::mem::MaybeUninit::zeroed().assume_init() }
+    }
+
     /// Creates a new context with the given entry point, user stack pointer,
     /// and the argument.
     pub fn new(entry: usize, ustack_top: VirtAddr, arg0: usize) -> Self {
@@ -79,6 +83,26 @@ impl UspaceContext {
         Self(tf)
     }
 
+    /// Gets the instruction pointer.
+    pub const fn get_ip(&self) -> usize {
+        self.0.rip as _
+    }
+
+    /// Gets the stack pointer.
+    pub const fn get_sp(&self) -> usize {
+        self.0.rsp as _
+    }
+
+    /// Sets the stack pointer.
+    pub const fn set_sp(&mut self, rsp: usize) {
+        self.0.rsp = rsp as _;
+    }
+
+    /// Sets the return value register.
+    pub const fn set_ret_reg(&mut self, rax: usize) {
+        self.0.rax = rax as _;
+    }
+
     /// Enters user space.
     ///
     /// It restores the user registers and jumps to the user entry point
@@ -91,7 +115,7 @@ impl UspaceContext {
     /// This function is unsafe because it changes processor mode and the stack.
     pub unsafe fn enter_uspace(&self, kstack_top: VirtAddr) -> ! {
         super::disable_irqs();
-        super::tss_set_rsp0(kstack_top);
+        assert_eq!(super::tss_get_rsp0(), kstack_top);
         asm!("
             mov     rsp, {tf}
             pop     rax
@@ -218,15 +242,26 @@ pub struct TaskContext {
     /// Extended states, i.e., FP/SIMD states.
     #[cfg(feature = "fp_simd")]
     pub ext_state: ExtendedState,
+    /// The `CR3` register value, i.e., the page table root.
+    #[cfg(feature = "uspace")]
+    pub cr3: PhysAddr,
 }
 
 impl TaskContext {
-    /// Creates a new default context for a new task.
-    pub const fn new() -> Self {
+    /// Creates a dummy context for a new task.
+    ///
+    /// Note the context is not initialized, it will be filled by [`switch_to`]
+    /// (for initial tasks) and [`init`] (for regular tasks) methods.
+    ///
+    /// [`init`]: TaskContext::init
+    /// [`switch_to`]: TaskContext::switch_to
+    pub fn new() -> Self {
         Self {
             kstack_top: VirtAddr::from(0),
             rsp: 0,
             fs_base: 0,
+            #[cfg(feature = "uspace")]
+            cr3: crate::paging::kernel_page_table_root(),
             #[cfg(feature = "fp_simd")]
             ext_state: ExtendedState::default(),
         }
@@ -254,6 +289,17 @@ impl TaskContext {
         self.fs_base = tls_area.as_usize();
     }
 
+    /// Changes the page table root (`CR3` register for x86_64).
+    ///
+    /// If not set, the kernel page table root is used (obtained by
+    /// [`axhal::paging::kernel_page_table_root`][1]).
+    ///
+    /// [1]: crate::paging::kernel_page_table_root
+    #[cfg(feature = "uspace")]
+    pub fn set_page_table_root(&mut self, cr3: PhysAddr) {
+        self.cr3 = cr3;
+    }
+
     /// Switches to another task.
     ///
     /// It first saves the current task's context from CPU to this place, and then
@@ -265,9 +311,16 @@ impl TaskContext {
             next_ctx.ext_state.restore();
         }
         #[cfg(feature = "tls")]
-        {
+        unsafe {
             self.fs_base = super::read_thread_pointer();
-            unsafe { super::write_thread_pointer(next_ctx.fs_base) };
+            super::write_thread_pointer(next_ctx.fs_base);
+        }
+        #[cfg(feature = "uspace")]
+        unsafe {
+            super::tss_set_rsp0(next_ctx.kstack_top);
+            if next_ctx.cr3 != self.cr3 {
+                super::write_page_table_root(next_ctx.cr3);
+            }
         }
         unsafe { context_switch(&mut self.rsp, &next_ctx.rsp) }
     }

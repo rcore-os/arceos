@@ -2,6 +2,7 @@
 
 use axalloc::global_allocator;
 use page_table::PagingIf;
+use spin::Once;
 
 use crate::mem::{phys_to_virt, virt_to_phys, MemRegionFlags, PhysAddr, VirtAddr, PAGE_SIZE_4K};
 
@@ -63,4 +64,25 @@ cfg_if::cfg_if! {
         /// The architecture-specific page table.
         pub type PageTable = page_table::aarch64::A64PageTable<PagingIfImpl>;
     }
+}
+
+static KERNEL_PAGE_TABLE_ROOT: Once<PhysAddr> = Once::new();
+
+/// Saves the kernel page table information, which may be used on context
+/// switch.
+pub fn set_kernel_page_table(kern_pt: &PageTable) {
+    let root_paddr = kern_pt.root_paddr();
+    KERNEL_PAGE_TABLE_ROOT.call_once(|| root_paddr);
+    unsafe { crate::arch::write_page_table_root(root_paddr) };
+}
+
+/// Get the root physical address of the kernel page table.
+///
+/// # Panics
+///
+/// It must be called after [`set_kernel_page_table`], otherwise it will panic.
+pub fn kernel_page_table_root() -> PhysAddr {
+    *KERNEL_PAGE_TABLE_ROOT
+        .get()
+        .expect("kernel page table not initialized")
 }

@@ -251,8 +251,7 @@ fn remap_kernel_memory() -> Result<(), axhal::paging::PagingError> {
         }
         KERNEL_PAGE_TABLE.init_by(kernel_page_table);
     }
-
-    unsafe { axhal::arch::write_page_table_root(KERNEL_PAGE_TABLE.root_paddr()) };
+    axhal::paging::set_kernel_page_table(&KERNEL_PAGE_TABLE);
     Ok(())
 }
 

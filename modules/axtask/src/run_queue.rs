@@ -24,7 +24,7 @@ pub(crate) struct AxRunQueue {
 
 impl AxRunQueue {
     pub fn new() -> SpinNoIrq<Self> {
-        let gc_task = TaskInner::new(gc_entry, "gc".into(), axconfig::TASK_STACK_SIZE);
+        let gc_task = TaskInner::new(gc_entry, "gc".into(), axconfig::TASK_STACK_SIZE).into_arc();
         let mut scheduler = Scheduler::new();
         scheduler.add_task(gc_task);
         SpinNoIrq::new(Self { scheduler })
@@ -214,21 +214,22 @@ fn gc_entry() {
 }
 
 pub(crate) fn init() {
-    // Put the subsequent execution into the `main` task.
+    // Create the `idle` task (not current task).
     const IDLE_TASK_STACK_SIZE: usize = 4096;
     let idle_task = TaskInner::new(|| crate::run_idle(), "idle".into(), IDLE_TASK_STACK_SIZE);
-    IDLE_TASK.with_current(|i| i.init_by(idle_task.clone()));
+    IDLE_TASK.with_current(|i| i.init_by(idle_task.into_arc()));
 
-    let main_task = TaskInner::new_init("main".into());
+    // Put the subsequent execution into the `main` task.
+    let main_task = TaskInner::new_init("main".into()).into_arc();
     main_task.set_state(TaskState::Running);
+    unsafe { CurrentTask::init_current(main_task) };
 
     RUN_QUEUE.init_by(AxRunQueue::new());
-    unsafe { CurrentTask::init_current(main_task) }
 }
 
 pub(crate) fn init_secondary() {
     // Put the subsequent execution into the `idle` task.
-    let idle_task = TaskInner::new_init("idle".into());
+    let idle_task = TaskInner::new_init("idle".into()).into_arc();
     idle_task.set_state(TaskState::Running);
     IDLE_TASK.with_current(|i| i.init_by(idle_task.clone()));
     unsafe { CurrentTask::init_current(idle_task) }

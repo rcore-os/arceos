@@ -15,7 +15,7 @@ use x86::{controlregs, msr, tlb};
 use x86_64::instructions::interrupts;
 
 pub use self::context::{ExtendedState, FxsaveArea, TaskContext, TrapFrame};
-pub use self::gdt::{init_gdt, tss_set_rsp0, GdtStruct};
+pub use self::gdt::{init_gdt, tss_get_rsp0, tss_set_rsp0, GdtStruct};
 pub use self::idt::{init_idt, IdtStruct};
 
 #[cfg(feature = "uspace")]
