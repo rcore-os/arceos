@@ -2,6 +2,16 @@
 
 use crate_interface::{call_interface, def_interface};
 
+use crate::arch::TrapFrame;
+
+/// Syscall handler interface.
+#[def_interface]
+pub trait SyscallHandler {
+    /// Handles a system call with the given number, arguments are stored in
+    /// [`TrapFrame`].
+    fn handle_syscall(tf: &TrapFrame, syscall_num: usize) -> isize;
+}
+
 /// Trap handler interface.
 ///
 /// This trait is defined with the [`#[def_interface]`][1] attribute. Users
@@ -20,4 +30,10 @@ pub trait TrapHandler {
 #[allow(dead_code)]
 pub(crate) fn handle_irq_extern(irq_num: usize) {
     call_interface!(TrapHandler::handle_irq, irq_num);
+}
+
+/// Call the external syscall handler.
+#[allow(dead_code)]
+pub(crate) fn handle_syscall(tf: &TrapFrame, syscall_num: usize) -> isize {
+    call_interface!(SyscallHandler::handle_syscall, tf, syscall_num)
 }
