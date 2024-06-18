@@ -6,11 +6,12 @@ extern crate axlog;
 extern crate alloc;
 extern crate axstd;
 
+mod syscall;
 mod task;
 
 use alloc::sync::Arc;
 
-use axhal::arch::{TrapFrame, UspaceContext};
+use axhal::arch::UspaceContext;
 use axhal::mem::virt_to_phys;
 use axhal::paging::MappingFlags;
 use axruntime::KERNEL_PAGE_TABLE;
@@ -28,14 +29,14 @@ fn app_main(arg0: usize) {
         core::arch::asm!(
             "2:",
             "int3",
+            "mov rax, r12",
             "syscall",
-            "add rax, 1",
+            "add r12, 1",
             "jmp 2b",
-            in("rax") arg0,
+            in("r12") arg0,
             in("rdi") 2,
             in("rsi") 3,
             in("rdx") 3,
-            in("rcx") 3,
             options(nostack, nomem)
         )
     }
@@ -61,15 +62,6 @@ fn spawn_user_task(aspace: Arc<Mutex<AddrSpace>>, uctx: UspaceContext) -> AxTask
         .set_page_table_root(aspace.lock().page_table_root());
     task.init_task_ext(TaskExt::new(uctx, aspace));
     axtask::spawn_task(task)
-}
-
-fn sys_clone(tf: &TrapFrame, newsp: usize) -> usize {
-    let aspace = axtask::current().task_ext().aspace.clone();
-    let mut uctx = UspaceContext::from(tf);
-    uctx.set_sp(newsp);
-    uctx.set_ret_reg(0);
-    let new_task = spawn_user_task(aspace, uctx);
-    new_task.id().as_u64() as usize
 }
 
 fn run_apps() -> ! {
@@ -102,7 +94,7 @@ fn run_apps() -> ! {
         ustack_vaddr,
         ustack_paddr,
         4096,
-        MappingFlags::READ | MappingFlags::EXECUTE | MappingFlags::USER,
+        MappingFlags::READ | MappingFlags::WRITE | MappingFlags::USER,
         false,
     )
     .unwrap();
