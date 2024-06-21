@@ -124,15 +124,15 @@ name = "arceos-monolithic"
 version = "0.1.0"
 dependencies = [
  "arceos_posix_api",
- "axconfig",
  "axerrno",
  "axhal",
- "axlog",
+ "axmm",
  "axruntime",
  "axstd",
  "axsync",
  "axtask",
  "crate_interface",
+ "log",
  "memory_addr",
 ]
 
@@ -445,6 +445,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "axmm"
+version = "0.1.0"
+dependencies = [
+ "axconfig",
+ "axerrno",
+ "axhal",
+ "lazy_init",
+ "log",
+ "memory_addr",
+]
+
+[[package]]
 name = "axnet"
 version = "0.1.0"
 dependencies = [
@@ -473,11 +485,11 @@ dependencies = [
  "axfs",
  "axhal",
  "axlog",
+ "axmm",
  "axnet",
  "axtask",
  "crate_interface",
  "kernel_guard",
- "lazy_init",
  "percpu",
 ]
 

@@ -7,6 +7,7 @@ pub use memory_addr::{PhysAddr, VirtAddr, PAGE_SIZE_4K};
 
 bitflags::bitflags! {
     /// The flags of a physical memory region.
+    #[derive(Clone, Copy)]
     pub struct MemRegionFlags: usize {
         /// Readable.
         const READ          = 1 << 0;

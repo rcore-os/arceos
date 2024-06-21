@@ -1,16 +1,8 @@
 use alloc::sync::Arc;
 
 use axhal::arch::UspaceContext;
+use axmm::AddrSpace;
 use axsync::Mutex;
-use memory_addr::PhysAddr;
-
-pub struct AddrSpace(pub PhysAddr);
-
-impl AddrSpace {
-    pub fn page_table_root(&self) -> PhysAddr {
-        self.0
-    }
-}
 
 /// Task extended data for the monolithic kernel.
 pub struct TaskExt {

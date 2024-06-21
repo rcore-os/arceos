@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(effects)]
 #![doc = include_str!("../README.md")]
 
 use core::fmt;
@@ -98,7 +99,7 @@ impl PhysAddr {
     ///
     /// See the [`align_down`] function for more information.
     #[inline]
-    pub fn align_down<U>(self, align: U) -> Self
+    pub const fn align_down<U>(self, align: U) -> Self
     where
         U: Into<usize>,
     {
@@ -109,7 +110,7 @@ impl PhysAddr {
     ///
     /// See the [`align_up`] function for more information.
     #[inline]
-    pub fn align_up<U>(self, align: U) -> Self
+    pub const fn align_up<U>(self, align: U) -> Self
     where
         U: Into<usize>,
     {
@@ -120,7 +121,7 @@ impl PhysAddr {
     ///
     /// See the [`align_offset`] function for more information.
     #[inline]
-    pub fn align_offset<U>(self, align: U) -> usize
+    pub const fn align_offset<U>(self, align: U) -> usize
     where
         U: Into<usize>,
     {
@@ -131,7 +132,7 @@ impl PhysAddr {
     ///
     /// See the [`is_aligned`] function for more information.
     #[inline]
-    pub fn is_aligned<U>(self, align: U) -> bool
+    pub const fn is_aligned<U>(self, align: U) -> bool
     where
         U: Into<usize>,
     {
@@ -140,25 +141,25 @@ impl PhysAddr {
 
     /// Aligns the address downwards to 4096 (bytes).
     #[inline]
-    pub fn align_down_4k(self) -> Self {
+    pub const fn align_down_4k(self) -> Self {
         self.align_down(PAGE_SIZE_4K)
     }
 
     /// Aligns the address upwards to 4096 (bytes).
     #[inline]
-    pub fn align_up_4k(self) -> Self {
+    pub const fn align_up_4k(self) -> Self {
         self.align_up(PAGE_SIZE_4K)
     }
 
     /// Returns the offset of the address within a 4K-sized page.
     #[inline]
-    pub fn align_offset_4k(self) -> usize {
+    pub const fn align_offset_4k(self) -> usize {
         self.align_offset(PAGE_SIZE_4K)
     }
 
     /// Checks whether the address is 4K-aligned.
     #[inline]
-    pub fn is_aligned_4k(self) -> bool {
+    pub const fn is_aligned_4k(self) -> bool {
         self.is_aligned(PAGE_SIZE_4K)
     }
 }
@@ -225,7 +226,7 @@ impl VirtAddr {
     ///
     /// See the [`is_aligned`] function for more information.
     #[inline]
-    pub fn is_aligned<U>(self, align: U) -> bool
+    pub const fn is_aligned<U>(self, align: U) -> bool
     where
         U: Into<usize>,
     {
@@ -252,7 +253,7 @@ impl VirtAddr {
 
     /// Checks whether the address is 4K-aligned.
     #[inline]
-    pub fn is_aligned_4k(self) -> bool {
+    pub const fn is_aligned_4k(self) -> bool {
         self.is_aligned(PAGE_SIZE_4K)
     }
 }

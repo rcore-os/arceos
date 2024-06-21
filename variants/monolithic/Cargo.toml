@@ -8,12 +8,12 @@ axstd = { path = "../../ulib/axstd", features = ["paging"] }
 arceos_posix_api = { path = "../../api/arceos_posix_api" }
 
 axhal = { path = "../../modules/axhal", features = ["uspace"] }
-axlog = { path = "../../modules/axlog" }
-axconfig = { path = "../../modules/axconfig" }
+axmm = { path = "../../modules/axmm" }
 axtask = { path = "../../modules/axtask" }
 axsync = { path = "../../modules/axsync" }
 axruntime = { path = "../../modules/axruntime", features = ["multitask"] }
 
+log = "0.4"
 axerrno = { path = "../../crates/axerrno" }
 memory_addr = { path = "../../crates/memory_addr" }
 crate_interface = { path = "../../crates/crate_interface" }
