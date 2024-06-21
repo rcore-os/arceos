@@ -247,16 +247,13 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         )
     }
 
-    /// Shallow clone the page table, keeping only the given virtual memory
-    /// region.
-    pub fn clone_shallow(&self, start: VirtAddr, size: usize) -> PagingResult<Self> {
-        let pt = Self::try_new()?;
+    /// Copy entries from another page table within the given virtual memory range.
+    pub fn copy_from(&mut self, other: &Self, start: VirtAddr, size: usize) {
         if size == 0 {
-            return Ok(pt);
+            return;
         }
-
-        let src_table = Self::table_of(self.root_paddr);
-        let dst_table = Self::table_of_mut(pt.root_paddr);
+        let src_table = Self::table_of(other.root_paddr);
+        let dst_table = Self::table_of_mut(self.root_paddr);
         let index_fn = if M::LEVELS == 3 {
             p3_index
         } else if M::LEVELS == 4 {
@@ -269,7 +266,6 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         assert!(start_idx < ENTRY_COUNT);
         assert!(end_idx <= ENTRY_COUNT);
         dst_table[start_idx..end_idx].copy_from_slice(&src_table[start_idx..end_idx]);
-        Ok(pt)
     }
 }
 

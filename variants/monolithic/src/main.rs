@@ -2,7 +2,7 @@
 #![no_main]
 
 #[macro_use]
-extern crate axlog;
+extern crate log;
 extern crate alloc;
 extern crate axstd;
 
@@ -14,7 +14,6 @@ use memory_addr::{PhysAddr, VirtAddr};
 use axhal::arch::UspaceContext;
 use axhal::mem::virt_to_phys;
 use axhal::paging::MappingFlags;
-use axruntime::KERNEL_PAGE_TABLE;
 use axtask::{AxTaskRef, TaskExtMut, TaskExtRef, TaskInner};
 
 const USER_STACK_SIZE: usize = 4096;
@@ -72,31 +71,26 @@ fn run_apps() -> ! {
     let ustack_top = VirtAddr::from(0x7fff_0000);
     let ustack_vaddr = ustack_top - USER_STACK_SIZE;
 
-    let kspace_base = VirtAddr::from(axconfig::PHYS_VIRT_OFFSET);
-    let kspace_size = 0x7f_ffff_f000;
-    let mut pt = KERNEL_PAGE_TABLE
-        .clone_shallow(kspace_base, kspace_size)
+    let mut uspace = axmm::new_user_aspace().unwrap();
+    uspace
+        .map_fixed(
+            entry_vaddr_align,
+            entry_paddr_align,
+            4096,
+            MappingFlags::READ | MappingFlags::EXECUTE | MappingFlags::USER,
+        )
+        .unwrap();
+    uspace
+        .map_fixed(
+            ustack_vaddr,
+            ustack_paddr,
+            4096,
+            MappingFlags::READ | MappingFlags::WRITE | MappingFlags::USER,
+        )
         .unwrap();
 
-    pt.map_region(
-        entry_vaddr_align,
-        entry_paddr_align,
-        4096,
-        MappingFlags::READ | MappingFlags::EXECUTE | MappingFlags::USER,
-        false,
-    )
-    .unwrap();
-    pt.map_region(
-        ustack_vaddr,
-        ustack_paddr,
-        4096,
-        MappingFlags::READ | MappingFlags::WRITE | MappingFlags::USER,
-        false,
-    )
-    .unwrap();
-
     spawn_user_task(
-        pt.root_paddr(),
+        uspace.page_table_root(),
         UspaceContext::new(entry_vaddr.into(), ustack_top, 2333),
     );
 

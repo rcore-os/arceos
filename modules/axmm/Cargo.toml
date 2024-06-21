@@ -1,0 +1,19 @@
+[package]
+name = "axmm"
+version = "0.1.0"
+edition = "2021"
+authors = ["Yuekai Jia <equation618@gmail.com>"]
+description = "ArceOS virtual memory management module"
+license = "GPL-3.0-or-later OR Apache-2.0"
+homepage = "https://github.com/rcore-os/arceos"
+repository = "https://github.com/rcore-os/arceos/tree/main/modules/axmm"
+documentation = "https://rcore-os.github.io/arceos/axmm/index.html"
+
+[dependencies]
+axhal = { path = "../axhal", features = ["paging"] }
+axconfig = { path = "../../modules/axconfig" }
+
+log = "0.4"
+axerrno = { path = "../../crates/axerrno" }
+lazy_init = { path = "../../crates/lazy_init" }
+memory_addr = { path = "../../crates/memory_addr" }
