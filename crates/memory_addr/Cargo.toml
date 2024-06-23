@@ -1,6 +1,6 @@
 [package]
 name = "memory_addr"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Yuekai Jia <equation618@gmail.com>"]
 description = "Wrappers and helper functions for physical and virtual addresses"
