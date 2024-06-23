@@ -1,9 +1,18 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![feature(effects)]
 #![doc = include_str!("../README.md")]
 
-use core::fmt;
-use core::ops::{Add, AddAssign, Sub, SubAssign};
+mod addr;
+mod range;
+
+pub use self::addr::{PhysAddr, VirtAddr};
+pub use self::range::AddrRange;
+
+/// A range of physical addresses.
+pub type PhysAddrRange = AddrRange<PhysAddr>;
+
+/// A range of virtual addresses.
+pub type VirtAddrRange = AddrRange<VirtAddr>;
 
 /// The size of a 4K page (4096 bytes).
 pub const PAGE_SIZE_4K: usize = 0x1000;
@@ -68,317 +77,74 @@ pub const fn is_aligned_4k(addr: usize) -> bool {
     is_aligned(addr, PAGE_SIZE_4K)
 }
 
-/// A physical memory address.
-///
-/// It's a wrapper type around an `usize`.
-#[repr(transparent)]
-#[derive(Copy, Clone, Default, Ord, PartialOrd, Eq, PartialEq)]
-pub struct PhysAddr(usize);
+#[cfg(test)]
+mod tests {
+    use crate::{VirtAddr, VirtAddrRange};
 
-/// A virtual memory address.
-///
-/// It's a wrapper type around an `usize`.
-#[repr(transparent)]
-#[derive(Copy, Clone, Default, Ord, PartialOrd, Eq, PartialEq)]
-pub struct VirtAddr(usize);
+    #[test]
+    fn test_addr() {
+        let addr = VirtAddr::from(0x2000);
+        assert!(addr.is_aligned_4k());
+        assert!(!addr.is_aligned(0x10000usize));
+        assert_eq!(addr.align_offset_4k(), 0);
+        assert_eq!(addr.align_down_4k(), VirtAddr::from(0x2000));
+        assert_eq!(addr.align_up_4k(), VirtAddr::from(0x2000));
 
-impl PhysAddr {
-    /// Converts an `usize` to a physical address.
-    #[inline]
-    pub const fn from(addr: usize) -> Self {
-        Self(addr)
+        let addr = VirtAddr::from(0x2fff);
+        assert!(!addr.is_aligned_4k());
+        assert_eq!(addr.align_offset_4k(), 0xfff);
+        assert_eq!(addr.align_down_4k(), VirtAddr::from(0x2000));
+        assert_eq!(addr.align_up_4k(), VirtAddr::from(0x3000));
+
+        let align = 0x100000;
+        let addr = VirtAddr::from(align * 5) + 0x2000;
+        assert!(addr.is_aligned_4k());
+        assert!(!addr.is_aligned(align));
+        assert_eq!(addr.align_offset(align), 0x2000);
+        assert_eq!(addr.align_down(align), VirtAddr::from(align * 5));
+        assert_eq!(addr.align_up(align), VirtAddr::from(align * 6));
     }
 
-    /// Converts the address to an `usize`.
-    #[inline]
-    pub const fn as_usize(self) -> usize {
-        self.0
-    }
+    #[test]
+    fn test_range() {
+        let start = VirtAddr::from(0x1000);
+        let end = VirtAddr::from(0x2000);
+        let range = VirtAddrRange::from(start..end);
+        println!("range: {:?}", range);
 
-    /// Aligns the address downwards to the given alignment.
-    ///
-    /// See the [`align_down`] function for more information.
-    #[inline]
-    pub const fn align_down<U>(self, align: U) -> Self
-    where
-        U: Into<usize>,
-    {
-        Self(align_down(self.0, align.into()))
-    }
+        assert!((0x1000..0x1000).is_empty());
+        assert!((0x1000..0xfff).is_empty());
+        assert!(!range.is_empty());
 
-    /// Aligns the address upwards to the given alignment.
-    ///
-    /// See the [`align_up`] function for more information.
-    #[inline]
-    pub const fn align_up<U>(self, align: U) -> Self
-    where
-        U: Into<usize>,
-    {
-        Self(align_up(self.0, align.into()))
-    }
+        assert_eq!(range.start, start);
+        assert_eq!(range.end, end);
+        assert_eq!(range.size(), 0x1000);
 
-    /// Returns the offset of the address within the given alignment.
-    ///
-    /// See the [`align_offset`] function for more information.
-    #[inline]
-    pub const fn align_offset<U>(self, align: U) -> usize
-    where
-        U: Into<usize>,
-    {
-        align_offset(self.0, align.into())
-    }
+        assert!(range.contains(0x1000.into()));
+        assert!(range.contains(0x1080.into()));
+        assert!(!range.contains(0x2000.into()));
 
-    /// Checks whether the address has the demanded alignment.
-    ///
-    /// See the [`is_aligned`] function for more information.
-    #[inline]
-    pub const fn is_aligned<U>(self, align: U) -> bool
-    where
-        U: Into<usize>,
-    {
-        is_aligned(self.0, align.into())
-    }
+        assert!(!range.contains_range((0xfff..0x1fff).into()));
+        assert!(!range.contains_range((0xfff..0x2000).into()));
+        assert!(!range.contains_range((0xfff..0x2001).into()));
+        assert!(range.contains_range((0x1000..0x1fff).into()));
+        assert!(range.contains_range((0x1000..0x2000).into()));
+        assert!(!range.contains_range((0x1000..0x2001).into()));
+        assert!(range.contains_range((0x1001..0x1fff).into()));
+        assert!(range.contains_range((0x1001..0x2000).into()));
+        assert!(!range.contains_range((0x1001..0x2001).into()));
+        assert!(!range.contains_range(VirtAddrRange::from_start_size(0xfff.into(), 0x1)));
+        assert!(!range.contains_range(VirtAddrRange::from_start_size(0x2000.into(), 0x1)));
 
-    /// Aligns the address downwards to 4096 (bytes).
-    #[inline]
-    pub const fn align_down_4k(self) -> Self {
-        self.align_down(PAGE_SIZE_4K)
-    }
+        assert!(range.contained_in((0xfff..0x2000).into()));
+        assert!(range.contained_in((0x1000..0x2000).into()));
+        assert!(range.contained_in((0x1000..0x2001).into()));
 
-    /// Aligns the address upwards to 4096 (bytes).
-    #[inline]
-    pub const fn align_up_4k(self) -> Self {
-        self.align_up(PAGE_SIZE_4K)
-    }
-
-    /// Returns the offset of the address within a 4K-sized page.
-    #[inline]
-    pub const fn align_offset_4k(self) -> usize {
-        self.align_offset(PAGE_SIZE_4K)
-    }
-
-    /// Checks whether the address is 4K-aligned.
-    #[inline]
-    pub const fn is_aligned_4k(self) -> bool {
-        self.is_aligned(PAGE_SIZE_4K)
-    }
-}
-
-impl VirtAddr {
-    /// Converts an `usize` to a virtual address.
-    #[inline]
-    pub const fn from(addr: usize) -> Self {
-        Self(addr)
-    }
-
-    /// Converts the address to an `usize`.
-    #[inline]
-    pub const fn as_usize(self) -> usize {
-        self.0
-    }
-
-    /// Converts the virtual address to a raw pointer.
-    #[inline]
-    pub const fn as_ptr(self) -> *const u8 {
-        self.0 as *const u8
-    }
-
-    /// Converts the virtual address to a mutable raw pointer.
-    #[inline]
-    pub const fn as_mut_ptr(self) -> *mut u8 {
-        self.0 as *mut u8
-    }
-
-    /// Aligns the address downwards to the given alignment.
-    ///
-    /// See the [`align_down`] function for more information.
-    #[inline]
-    pub fn align_down<U>(self, align: U) -> Self
-    where
-        U: Into<usize>,
-    {
-        Self(align_down(self.0, align.into()))
-    }
-
-    /// Aligns the address upwards to the given alignment.
-    ///
-    /// See the [`align_up`] function for more information.
-    #[inline]
-    pub fn align_up<U>(self, align: U) -> Self
-    where
-        U: Into<usize>,
-    {
-        Self(align_up(self.0, align.into()))
-    }
-
-    /// Returns the offset of the address within the given alignment.
-    ///
-    /// See the [`align_offset`] function for more information.
-    #[inline]
-    pub fn align_offset<U>(self, align: U) -> usize
-    where
-        U: Into<usize>,
-    {
-        align_offset(self.0, align.into())
-    }
-
-    /// Checks whether the address has the demanded alignment.
-    ///
-    /// See the [`is_aligned`] function for more information.
-    #[inline]
-    pub const fn is_aligned<U>(self, align: U) -> bool
-    where
-        U: Into<usize>,
-    {
-        is_aligned(self.0, align.into())
-    }
-
-    /// Aligns the address downwards to 4096 (bytes).
-    #[inline]
-    pub fn align_down_4k(self) -> Self {
-        self.align_down(PAGE_SIZE_4K)
-    }
-
-    /// Aligns the address upwards to 4096 (bytes).
-    #[inline]
-    pub fn align_up_4k(self) -> Self {
-        self.align_up(PAGE_SIZE_4K)
-    }
-
-    /// Returns the offset of the address within a 4K-sized page.
-    #[inline]
-    pub fn align_offset_4k(self) -> usize {
-        self.align_offset(PAGE_SIZE_4K)
-    }
-
-    /// Checks whether the address is 4K-aligned.
-    #[inline]
-    pub const fn is_aligned_4k(self) -> bool {
-        self.is_aligned(PAGE_SIZE_4K)
-    }
-}
-
-impl From<usize> for PhysAddr {
-    #[inline]
-    fn from(addr: usize) -> Self {
-        Self(addr)
-    }
-}
-
-impl From<usize> for VirtAddr {
-    #[inline]
-    fn from(addr: usize) -> Self {
-        Self(addr)
-    }
-}
-
-impl From<PhysAddr> for usize {
-    #[inline]
-    fn from(addr: PhysAddr) -> usize {
-        addr.0
-    }
-}
-
-impl From<VirtAddr> for usize {
-    #[inline]
-    fn from(addr: VirtAddr) -> usize {
-        addr.0
-    }
-}
-
-impl Add<usize> for PhysAddr {
-    type Output = Self;
-    #[inline]
-    fn add(self, rhs: usize) -> Self {
-        Self(self.0 + rhs)
-    }
-}
-
-impl AddAssign<usize> for PhysAddr {
-    #[inline]
-    fn add_assign(&mut self, rhs: usize) {
-        *self = *self + rhs;
-    }
-}
-
-impl Sub<usize> for PhysAddr {
-    type Output = Self;
-    #[inline]
-    fn sub(self, rhs: usize) -> Self {
-        Self(self.0 - rhs)
-    }
-}
-
-impl SubAssign<usize> for PhysAddr {
-    #[inline]
-    fn sub_assign(&mut self, rhs: usize) {
-        *self = *self - rhs;
-    }
-}
-
-impl Add<usize> for VirtAddr {
-    type Output = Self;
-    #[inline]
-    fn add(self, rhs: usize) -> Self {
-        Self(self.0 + rhs)
-    }
-}
-
-impl AddAssign<usize> for VirtAddr {
-    #[inline]
-    fn add_assign(&mut self, rhs: usize) {
-        *self = *self + rhs;
-    }
-}
-
-impl Sub<usize> for VirtAddr {
-    type Output = Self;
-    #[inline]
-    fn sub(self, rhs: usize) -> Self {
-        Self(self.0 - rhs)
-    }
-}
-
-impl SubAssign<usize> for VirtAddr {
-    #[inline]
-    fn sub_assign(&mut self, rhs: usize) {
-        *self = *self - rhs;
-    }
-}
-
-impl fmt::Debug for PhysAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("PA:{:#x}", self.0))
-    }
-}
-
-impl fmt::Debug for VirtAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("VA:{:#x}", self.0))
-    }
-}
-
-impl fmt::LowerHex for PhysAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("PA:{:#x}", self.0))
-    }
-}
-
-impl fmt::UpperHex for PhysAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("PA:{:#X}", self.0))
-    }
-}
-
-impl fmt::LowerHex for VirtAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("VA:{:#x}", self.0))
-    }
-}
-
-impl fmt::UpperHex for VirtAddr {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("VA:{:#X}", self.0))
+        assert!(!range.overlaps((0x800..0x1000).into()));
+        assert!(range.overlaps((0x800..0x1001).into()));
+        assert!(range.overlaps((0x1800..0x2000).into()));
+        assert!(range.overlaps((0x1800..0x2001).into()));
+        assert!(!range.overlaps((0x2000..0x2800).into()));
+        assert!(range.overlaps((0xfff..0x2001).into()));
     }
 }
