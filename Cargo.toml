@@ -25,6 +25,7 @@ members = [
     "crates/lazy_init",
     "crates/linked_list",
     "crates/memory_addr",
+    "crates/memory_set",
     "crates/page_table",
     "crates/page_table_entry",
     "crates/percpu",
