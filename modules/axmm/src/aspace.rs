@@ -1,32 +1,34 @@
 use core::fmt;
 
-use axerrno::{ax_err, AxResult};
+use axerrno::{ax_err, AxError, AxResult};
 use axhal::paging::{MappingFlags, PageTable};
-use memory_addr::{PhysAddr, VirtAddr};
+use memory_addr::{is_aligned_4k, PhysAddr, VirtAddr, VirtAddrRange};
+use memory_set::{MemoryArea, MemorySet};
 
-use crate::paging_err_to_ax_err;
+use crate::backend::FixedBackend;
+use crate::mapping_err_to_ax_err;
 
 /// The virtual memory address space.
 pub struct AddrSpace {
-    base: VirtAddr,
-    end: VirtAddr,
+    va_range: VirtAddrRange,
+    areas: MemorySet<MappingFlags, PageTable, FixedBackend>,
     pt: PageTable,
 }
 
 impl AddrSpace {
     /// Returns the address space base.
     pub const fn base(&self) -> VirtAddr {
-        self.base
+        self.va_range.start
     }
 
     /// Returns the address space end.
     pub const fn end(&self) -> VirtAddr {
-        self.end
+        self.va_range.end
     }
 
     /// Returns the address space size.
     pub const fn size(&self) -> usize {
-        self.end.as_usize() - self.base.as_usize()
+        self.va_range.size()
     }
 
     /// Returns the reference to the inner page table.
@@ -39,28 +41,18 @@ impl AddrSpace {
         self.pt.root_paddr()
     }
 
-    /// Checks if the address space contains the given virtual address.
-    pub const fn contains(&self, addr: VirtAddr) -> bool {
-        self.base.as_usize() <= addr.as_usize() && addr.as_usize() < self.end.as_usize()
-    }
-
-    /// Checks if the address space contains the given virtual address range.
+    /// Checks if the address space contains the given address range.
     pub const fn contains_range(&self, start: VirtAddr, size: usize) -> bool {
-        self.base.as_usize() <= start.as_usize() && start.as_usize() + size < self.end.as_usize()
-    }
-
-    /// Checks if the address space overlaps with the given virtual address range.
-    pub const fn overlaps_with(&self, start: VirtAddr, size: usize) -> bool {
-        let end = start.as_usize() + size;
-        !(end <= self.base.as_usize() || start.as_usize() >= self.end.as_usize())
+        self.va_range
+            .contains_range(VirtAddrRange::from_start_size(start, size))
     }
 
     /// Creates a new empty address space.
     pub(crate) fn new_empty(base: VirtAddr, size: usize) -> AxResult<Self> {
         Ok(Self {
-            base,
-            end: base + size,
-            pt: PageTable::try_new().map_err(paging_err_to_ax_err)?,
+            va_range: VirtAddrRange::from_start_size(base, size),
+            areas: MemorySet::new(),
+            pt: PageTable::try_new().map_err(|_| AxError::NoMemory)?,
         })
     }
 
@@ -70,7 +62,7 @@ impl AddrSpace {
     /// usually usually used to copy a portion of the kernel space mapping to
     /// the user space.
     pub fn copy_mappings_from(&mut self, other: &AddrSpace) -> AxResult {
-        if self.overlaps_with(other.base(), other.size()) {
+        if self.va_range.overlaps(other.va_range) {
             return ax_err!(InvalidInput, "address space overlap");
         }
         self.pt.copy_from(&other.pt, other.base(), other.size());
@@ -94,29 +86,51 @@ impl AddrSpace {
         if !self.contains_range(start_vaddr, size) {
             return ax_err!(InvalidInput, "address out of range");
         }
-        self.pt
-            .map_region(start_vaddr, start_paddr, size, flags, true)
-            .map_err(paging_err_to_ax_err)?;
+        if !start_vaddr.is_aligned_4k() || !start_paddr.is_aligned_4k() || !is_aligned_4k(size) {
+            return ax_err!(InvalidInput, "address not aligned");
+        }
+
+        let offset = start_vaddr.as_usize() - start_paddr.as_usize();
+        let area = MemoryArea::new(start_vaddr, size, flags, FixedBackend::new(offset));
+        self.areas
+            .map(area, &mut self.pt, false)
+            .map_err(mapping_err_to_ax_err)?;
         Ok(())
     }
 
-    /// Removes the mappings for the specified virtual address range.
+    /// Removes mappings within the specified virtual address range.
     pub fn unmap(&mut self, start: VirtAddr, size: usize) -> AxResult {
         if !self.contains_range(start, size) {
             return ax_err!(InvalidInput, "address out of range");
         }
-        self.pt
-            .unmap_region(start, size)
-            .map_err(paging_err_to_ax_err)?;
+        if !start.is_aligned_4k() || !is_aligned_4k(size) {
+            return ax_err!(InvalidInput, "address not aligned");
+        }
+
+        self.areas
+            .unmap(start, size, &mut self.pt)
+            .map_err(mapping_err_to_ax_err)?;
         Ok(())
+    }
+
+    /// Removes all mappings in the address space.
+    pub fn clear(&mut self) {
+        self.areas.clear(&mut self.pt).unwrap();
     }
 }
 
 impl fmt::Debug for AddrSpace {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("AddrSpace")
-            .field("va_range", &(self.base.as_usize()..self.end.as_usize()))
+            .field("va_range", &self.va_range)
             .field("page_table_root", &self.pt.root_paddr())
+            .field("areas", &self.areas)
             .finish()
+    }
+}
+
+impl Drop for AddrSpace {
+    fn drop(&mut self) {
+        self.clear();
     }
 }

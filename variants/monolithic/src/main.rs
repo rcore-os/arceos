@@ -27,11 +27,11 @@ const KERNEL_STACK_SIZE: usize = 0x40000; // 256 KiB
 fn app_main(arg0: usize) {
     unsafe {
         core::arch::asm!(
-            "2:",
             "int3",
             "mov rax, r12",
             "syscall",
             "add r12, 1",
+            "2:",
             "jmp 2b",
             in("r12") arg0,
             in("rdi") 2,
@@ -94,6 +94,7 @@ fn run_apps() -> ! {
         )
         .unwrap();
 
+    info!("New user address space: {:#x?}", uspace);
     spawn_user_task(
         Arc::new(Mutex::new(uspace)),
         UspaceContext::new(entry_vaddr.into(), ustack_top, 2333),

@@ -454,6 +454,7 @@ dependencies = [
  "lazy_init",
  "log",
  "memory_addr",
+ "memory_set",
 ]
 
 [[package]]
@@ -1227,6 +1228,13 @@ checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 [[package]]
 name = "memory_addr"
 version = "0.2.0"
+
+[[package]]
+name = "memory_set"
+version = "0.1.0"
+dependencies = [
+ "memory_addr",
+]
 
 [[package]]
 name = "micromath"

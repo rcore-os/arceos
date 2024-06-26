@@ -17,3 +17,4 @@ log = "0.4"
 axerrno = { path = "../../crates/axerrno" }
 lazy_init = { path = "../../crates/lazy_init" }
 memory_addr = { path = "../../crates/memory_addr" }
+memory_set = { path = "../../crates/memory_set" }

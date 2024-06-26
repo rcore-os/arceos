@@ -1,0 +1,15 @@
+[package]
+name = "memory_set"
+version = "0.1.0"
+edition = "2021"
+authors = ["Yuekai Jia <equation618@gmail.com>"]
+description = "Data structures and operations for managing memory mappings"
+license = "GPL-3.0-or-later OR Apache-2.0"
+homepage = "https://github.com/rcore-os/arceos"
+repository = "https://github.com/rcore-os/arceos/tree/main/crates/memory_set"
+documentation = "https://rcore-os.github.io/arceos/memory_set/index.html"
+keywords = ["arceos", "virtual-memory", "memory-area", "mmap"]
+categories = ["os", "memory-management", "no-std"]
+
+[dependencies]
+memory_addr = { path = "../memory_addr" }
