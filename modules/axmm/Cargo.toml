@@ -11,6 +11,7 @@ documentation = "https://rcore-os.github.io/arceos/axmm/index.html"
 
 [dependencies]
 axhal = { path = "../axhal", features = ["paging"] }
+axalloc = { path = "../../modules/axalloc" }
 axconfig = { path = "../../modules/axconfig" }
 
 log = "0.4"

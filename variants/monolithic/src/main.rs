@@ -70,15 +70,11 @@ fn run_apps() -> ! {
     let entry_vaddr_align = VirtAddr::from(0x1000);
     let entry_vaddr = entry_vaddr_align + entry.align_offset_4k();
 
-    let layout = core::alloc::Layout::from_size_align(USER_STACK_SIZE, 4096).unwrap();
-    let ustack = unsafe { alloc::alloc::alloc(layout) };
-    let ustack_paddr = virt_to_phys(VirtAddr::from(ustack as _));
-    let ustack_top = VirtAddr::from(0x7fff_0000);
-    let ustack_vaddr = ustack_top - USER_STACK_SIZE;
-
     let mut uspace = axmm::new_user_aspace().unwrap();
+    let ustack_top = uspace.end();
+    let ustack_vaddr = ustack_top - USER_STACK_SIZE;
     uspace
-        .map_fixed(
+        .map_linear(
             entry_vaddr_align,
             entry_paddr_align,
             4096,
@@ -86,11 +82,11 @@ fn run_apps() -> ! {
         )
         .unwrap();
     uspace
-        .map_fixed(
+        .map_alloc(
             ustack_vaddr,
-            ustack_paddr,
             4096,
             MappingFlags::READ | MappingFlags::WRITE | MappingFlags::USER,
+            true,
         )
         .unwrap();
 

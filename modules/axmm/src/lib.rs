@@ -10,6 +10,7 @@ mod aspace;
 mod backend;
 
 pub use self::aspace::AddrSpace;
+pub use self::backend::Backend;
 
 use axerrno::{AxError, AxResult};
 use axhal::mem::phys_to_virt;
@@ -39,7 +40,7 @@ pub fn new_kernel_aspace() -> AxResult<AddrSpace> {
         axconfig::KERNEL_ASPACE_SIZE,
     )?;
     for r in axhal::mem::memory_regions() {
-        aspace.map_fixed(phys_to_virt(r.paddr), r.paddr, r.size, r.flags.into())?;
+        aspace.map_linear(phys_to_virt(r.paddr), r.paddr, r.size, r.flags.into())?;
     }
     Ok(aspace)
 }
