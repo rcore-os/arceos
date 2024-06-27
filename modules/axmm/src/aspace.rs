@@ -5,13 +5,13 @@ use axhal::paging::{MappingFlags, PageTable};
 use memory_addr::{is_aligned_4k, PhysAddr, VirtAddr, VirtAddrRange};
 use memory_set::{MemoryArea, MemorySet};
 
-use crate::backend::FixedBackend;
+use crate::backend::Backend;
 use crate::mapping_err_to_ax_err;
 
 /// The virtual memory address space.
 pub struct AddrSpace {
     va_range: VirtAddrRange,
-    areas: MemorySet<MappingFlags, PageTable, FixedBackend>,
+    areas: MemorySet<MappingFlags, PageTable, Backend>,
     pt: PageTable,
 }
 
@@ -69,14 +69,12 @@ impl AddrSpace {
         Ok(())
     }
 
-    /// Add a new fixed mapping for the specified virtual and physical address
-    /// range.
+    /// Add a new linear mapping.
     ///
-    /// The mapping is linear, i.e., `start_vaddr` is mapped to `start_paddr`,
-    /// and `start_vaddr + size` is mapped to `start_paddr + size`.
+    /// See [`Backend`] for more details about the mapping backends.
     ///
-    /// The `flags` parameter specifies the mapping permissions and attributes.
-    pub fn map_fixed(
+    /// The `flags` parameter indicates the mapping permissions and attributes.
+    pub fn map_linear(
         &mut self,
         start_vaddr: VirtAddr,
         start_paddr: PhysAddr,
@@ -91,7 +89,33 @@ impl AddrSpace {
         }
 
         let offset = start_vaddr.as_usize() - start_paddr.as_usize();
-        let area = MemoryArea::new(start_vaddr, size, flags, FixedBackend::new(offset));
+        let area = MemoryArea::new(start_vaddr, size, flags, Backend::new_linear(offset));
+        self.areas
+            .map(area, &mut self.pt, false)
+            .map_err(mapping_err_to_ax_err)?;
+        Ok(())
+    }
+
+    /// Add a new allocation mapping.
+    ///
+    /// See [`Backend`] for more details about the mapping backends.
+    ///
+    /// The `flags` parameter indicates the mapping permissions and attributes.
+    pub fn map_alloc(
+        &mut self,
+        start: VirtAddr,
+        size: usize,
+        flags: MappingFlags,
+        populate: bool,
+    ) -> AxResult {
+        if !self.contains_range(start, size) {
+            return ax_err!(InvalidInput, "address out of range");
+        }
+        if !start.is_aligned_4k() || !is_aligned_4k(size) {
+            return ax_err!(InvalidInput, "address not aligned");
+        }
+
+        let area = MemoryArea::new(start, size, flags, Backend::new_alloc(populate));
         self.areas
             .map(area, &mut self.pt, false)
             .map_err(mapping_err_to_ax_err)?;

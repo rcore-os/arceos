@@ -3,10 +3,15 @@
 #![doc = include_str!("../README.md")]
 
 mod addr;
+mod iter;
 mod range;
 
 pub use self::addr::{PhysAddr, VirtAddr};
+pub use self::iter::PageIter;
 pub use self::range::AddrRange;
+
+/// A [`PageIter`] for 4K pages.
+pub type PageIter4K = PageIter<PAGE_SIZE_4K>;
 
 /// A range of physical addresses.
 pub type PhysAddrRange = AddrRange<PhysAddr>;

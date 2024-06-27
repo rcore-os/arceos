@@ -7,7 +7,7 @@ use crate::{MappingError, MappingResult};
 
 /// Underlying memory mapping operations specific to a memory area.
 ///
-/// The backend can be different for different memory areas. e.g., for fixed
+/// The backend can be different for different memory areas. e.g., for linear
 /// mappings, the target physical address is known when it is added to the page
 /// table. For lazy mappings, an empty mapping needs to be added to the page table
 /// to trigger a page fault.
