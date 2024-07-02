@@ -86,7 +86,7 @@ fn run_apps() -> ! {
             ustack_vaddr,
             4096,
             MappingFlags::READ | MappingFlags::WRITE | MappingFlags::USER,
-            true,
+            false,
         )
         .unwrap();
 

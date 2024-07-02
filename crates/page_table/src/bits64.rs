@@ -78,6 +78,25 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         Ok(())
     }
 
+    /// Remap the mapping starts with `vaddr`, updates both the physical address
+    /// and flags.
+    ///
+    /// Returns the page size of the mapping.
+    ///
+    /// Returns [`Err(PagingError::NotMapped)`](PagingError::NotMapped) if the
+    /// intermediate level tables of the mapping is not present.
+    pub fn remap(
+        &mut self,
+        vaddr: VirtAddr,
+        paddr: PhysAddr,
+        flags: MappingFlags,
+    ) -> PagingResult<PageSize> {
+        let (entry, size) = self.get_entry_mut(vaddr)?;
+        entry.set_paddr(paddr);
+        entry.set_flags(flags, size.is_huge());
+        Ok(size)
+    }
+
     /// Unmaps the mapping starts with `vaddr`.
     ///
     /// Returns [`Err(PagingError::NotMapped)`](PagingError::NotMapped) if the
@@ -92,7 +111,22 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         Ok((paddr, size))
     }
 
-    /// Query the result of the mapping starts with `vaddr`.
+    /// Updates the flags of the mapping starts with `vaddr`.
+    ///
+    /// Returns the page size of the mapping.
+    ///
+    /// Returns [`Err(PagingError::NotMapped)`](PagingError::NotMapped) if the
+    /// mapping is not present.
+    pub fn protect(&mut self, vaddr: VirtAddr, flags: MappingFlags) -> PagingResult<PageSize> {
+        let (entry, size) = self.get_entry_mut(vaddr)?;
+        if entry.is_unused() {
+            return Err(PagingError::NotMapped);
+        }
+        entry.set_flags(flags, size.is_huge());
+        Ok(size)
+    }
+
+    /// Queries the result of the mapping starts with `vaddr`.
     ///
     /// Returns the physical address of the target frame, mapping flags, and
     /// the page size.
@@ -108,30 +142,7 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         Ok((entry.paddr() + off, entry.flags(), size))
     }
 
-    /// Updates the target or flags of the mapping starts with `vaddr`. If the
-    /// corresponding argument is `None`, it will not be updated.
-    ///
-    /// Returns the page size of the mapping.
-    ///
-    /// Returns [`Err(PagingError::NotMapped)`](PagingError::NotMapped) if the
-    /// mapping is not present.
-    pub fn update(
-        &mut self,
-        vaddr: VirtAddr,
-        paddr: Option<PhysAddr>,
-        flags: Option<MappingFlags>,
-    ) -> PagingResult<PageSize> {
-        let (entry, size) = self.get_entry_mut(vaddr)?;
-        if let Some(paddr) = paddr {
-            entry.set_paddr(paddr);
-        }
-        if let Some(flags) = flags {
-            entry.set_flags(flags, size.is_huge());
-        }
-        Ok(size)
-    }
-
-    /// Map a contiguous virtual memory region to a contiguous physical memory
+    /// Maps a contiguous virtual memory region to a contiguous physical memory
     /// region with the given mapping `flags`.
     ///
     /// The virtual and physical memory regions start with `vaddr` and `paddr`
@@ -199,10 +210,10 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         Ok(())
     }
 
-    /// Unmap a contiguous virtual memory region.
+    /// Unmaps a contiguous virtual memory region.
     ///
     /// The region must be mapped before using [`PageTable64::map_region`], or
-    /// unexpected behaviors may occur.
+    /// unexpected behaviors may occur. It can deal with huge pages automatically.
     pub fn unmap_region(&mut self, vaddr: VirtAddr, size: usize) -> PagingResult {
         trace!(
             "unmap_region({:#x}) [{:#x}, {:#x})",
@@ -216,6 +227,37 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
             let (_, page_size) = self
                 .unmap(vaddr)
                 .inspect_err(|e| error!("failed to unmap page: {:#x?}, {:?}", vaddr, e))?;
+            assert!(vaddr.is_aligned(page_size));
+            assert!(page_size as usize <= size);
+            vaddr += page_size as usize;
+            size -= page_size as usize;
+        }
+        Ok(())
+    }
+
+    /// Updates mapping flags of a contiguous virtual memory region.
+    ///
+    /// The region must be mapped before using [`PageTable64::map_region`], or
+    /// unexpected behaviors may occur. It can deal with huge pages automatically.
+    pub fn protect_region(
+        &mut self,
+        vaddr: VirtAddr,
+        size: usize,
+        flags: MappingFlags,
+    ) -> PagingResult {
+        trace!(
+            "protect_region({:#x}) [{:#x}, {:#x}) {:?}",
+            self.root_paddr(),
+            vaddr,
+            vaddr + size,
+            flags,
+        );
+        let mut vaddr = vaddr;
+        let mut size = size;
+        while size > 0 {
+            let page_size = self
+                .protect(vaddr, flags)
+                .inspect_err(|e| error!("failed to protect page: {:#x?}, {:?}", vaddr, e))?;
             assert!(vaddr.is_aligned(page_size));
             assert!(page_size as usize <= size);
             vaddr += page_size as usize;

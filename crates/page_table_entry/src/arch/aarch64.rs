@@ -113,10 +113,10 @@ impl MemAttr {
 
 impl From<DescriptorAttr> for MappingFlags {
     fn from(attr: DescriptorAttr) -> Self {
-        let mut flags = Self::empty();
-        if attr.contains(DescriptorAttr::VALID) {
-            flags |= Self::READ;
+        if !attr.contains(DescriptorAttr::VALID) {
+            return Self::empty();
         }
+        let mut flags = Self::READ;
         if !attr.contains(DescriptorAttr::AP_RO) {
             flags |= Self::WRITE;
         }
@@ -139,6 +139,9 @@ impl From<DescriptorAttr> for MappingFlags {
 
 impl From<MappingFlags> for DescriptorAttr {
     fn from(flags: MappingFlags) -> Self {
+        if flags.is_empty() {
+            return Self::empty();
+        }
         let mut attr = if flags.contains(MappingFlags::DEVICE) {
             Self::from_mem_attr(MemAttr::Device)
         } else if flags.contains(MappingFlags::UNCACHED) {

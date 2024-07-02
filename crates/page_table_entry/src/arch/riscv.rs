@@ -33,6 +33,9 @@ bitflags::bitflags! {
 impl From<PTEFlags> for MappingFlags {
     fn from(f: PTEFlags) -> Self {
         let mut ret = Self::empty();
+        if !f.contains(PTEFlags::V) {
+            return ret;
+        }
         if f.contains(PTEFlags::R) {
             ret |= Self::READ;
         }

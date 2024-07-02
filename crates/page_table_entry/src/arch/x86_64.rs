@@ -9,7 +9,7 @@ use crate::{GenericPTE, MappingFlags};
 
 impl From<PTF> for MappingFlags {
     fn from(f: PTF) -> Self {
-        if f.is_empty() {
+        if !f.contains(PTF::PRESENT) {
             return Self::empty();
         }
         let mut ret = Self::READ;

@@ -4,6 +4,9 @@ use crate_interface::{call_interface, def_interface};
 
 use crate::arch::TrapFrame;
 
+pub use memory_addr::VirtAddr;
+pub use page_table_entry::MappingFlags as PageFaultFlags;
+
 /// Syscall handler interface.
 #[def_interface]
 pub trait SyscallHandler {
@@ -23,13 +26,25 @@ pub trait SyscallHandler {
 pub trait TrapHandler {
     /// Handles interrupt requests for the given IRQ number.
     fn handle_irq(irq_num: usize);
-    // more e.g.: handle_page_fault();
+    /// Handles (kernel/user) page faults with the given accessed address and
+    /// flags. Returns `true` if it handled successfully.
+    fn handle_page_fault(vaddr: VirtAddr, access_flags: PageFaultFlags, is_user: bool) -> bool;
 }
 
 /// Call the external IRQ handler.
 #[allow(dead_code)]
 pub(crate) fn handle_irq_extern(irq_num: usize) {
     call_interface!(TrapHandler::handle_irq, irq_num);
+}
+
+/// Call the external page fault handler.
+#[allow(dead_code)]
+pub(crate) fn handle_page_fault(
+    vaddr: VirtAddr,
+    access_flags: PageFaultFlags,
+    is_user: bool,
+) -> bool {
+    call_interface!(TrapHandler::handle_page_fault, vaddr, access_flags, is_user)
 }
 
 /// Call the external syscall handler.

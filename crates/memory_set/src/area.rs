@@ -65,6 +65,11 @@ impl<F: Copy, P, B: MappingBackend<F, P>> MemoryArea<F, P, B> {
     pub const fn size(&self) -> usize {
         self.va_range.size()
     }
+
+    /// Returns the mapping backend of the memory area.
+    pub const fn backend(&self) -> &B {
+        &self.backend
+    }
 }
 
 impl<F: Copy, P, B: MappingBackend<F, P>> MemoryArea<F, P, B> {
