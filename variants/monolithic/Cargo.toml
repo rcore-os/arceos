@@ -9,5 +9,6 @@ axhal = { path = "../../modules/axhal", features = ["uspace"] }
 axlog = { path = "../../modules/axlog" }
 axconfig = { path = "../../modules/axconfig" }
 axtask = { path = "../../modules/axtask" }
+axsync = { path = "../../modules/axsync" }
 axruntime = { path = "../../modules/axruntime", features = ["multitask"] }
 memory_addr = { path = "../../crates/memory_addr" }

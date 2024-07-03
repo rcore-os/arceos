@@ -1,46 +1,72 @@
 //! User-defined task extended data.
 
-extern "C" {
-    fn __start_ax_task_ext();
-    fn __stop_ax_task_ext();
-}
+use core::mem::{align_of, size_of};
 
 #[no_mangle]
 #[linkage = "weak"]
-#[link_section = "ax_task_ext"]
-static __AX_TASK_EXT: () = ();
+static __AX_TASK_EXT_SIZE: usize = 0;
+
+#[no_mangle]
+#[linkage = "weak"]
+static __AX_TASK_EXT_ALIGN: usize = 0;
 
 pub(crate) struct AxTaskExt {
     ptr: *mut u8,
 }
 
 impl AxTaskExt {
-    fn size() -> usize {
-        // In https://sourceware.org/binutils/docs/ld/Input-Section-Example.html:
-        //
-        // If an output section’s name is the same as the input section’s name
-        // and is representable as a C identifier, then the linker will
-        // automatically see PROVIDE two symbols: __start_SECNAME and
-        // __stop_SECNAME, where SECNAME is the name of the section.
-        __stop_ax_task_ext as usize - __start_ax_task_ext as usize
+    pub fn size() -> usize {
+        extern "C" {
+            static __AX_TASK_EXT_SIZE: usize;
+        }
+        unsafe { __AX_TASK_EXT_SIZE }
     }
 
-    pub(crate) fn as_ptr(&self) -> *mut u8 {
-        self.ptr
+    pub fn align() -> usize {
+        extern "C" {
+            static __AX_TASK_EXT_ALIGN: usize;
+        }
+        unsafe { __AX_TASK_EXT_ALIGN }
     }
 
-    pub(crate) fn alloc() -> Self {
+    pub fn null() -> Self {
+        Self {
+            ptr: core::ptr::null_mut(),
+        }
+    }
+
+    pub unsafe fn uninit() -> Self {
         let size = Self::size();
+        let align = Self::align();
         let ptr = if size == 0 {
             core::ptr::null_mut()
         } else {
-            let layout = core::alloc::Layout::from_size_align(size, 0x10).unwrap();
-            let dst = unsafe { alloc::alloc::alloc(layout) };
-            let src = &__AX_TASK_EXT as *const _ as *const u8;
-            unsafe { core::ptr::copy_nonoverlapping(src, dst, size) };
-            dst
+            let layout = core::alloc::Layout::from_size_align(size, align).unwrap();
+            unsafe { alloc::alloc::alloc(layout) }
         };
         Self { ptr }
+    }
+
+    pub fn as_ptr(&self) -> *mut u8 {
+        self.ptr
+    }
+
+    pub fn init<T: Sized>(&mut self, data: T) {
+        let data_size = size_of::<T>();
+        let data_align = align_of::<T>();
+        if data_size != Self::size() {
+            panic!("size mismatch: {} != {}", data_size, Self::size());
+        }
+        if data_align != Self::align() {
+            panic!("align mismatch: {} != {}", data_align, Self::align());
+        }
+
+        if self.ptr.is_null() {
+            *self = unsafe { Self::uninit() };
+        }
+        if data_size > 0 {
+            unsafe { (self.ptr as *mut T).write(data) };
+        }
     }
 }
 
@@ -78,27 +104,33 @@ pub trait TaskExtMut<T: Sized> {
 ///
 /// # Example
 ///
-/// ```no_run
+/// ```
 /// # #![allow(non_local_definitions)]
-/// use axtask::{def_task_ext, TaskExtRef};
+/// use axtask::{def_task_ext, TaskExtRef, TaskInner};
 ///
 /// pub struct TaskExtImpl {
 ///    proc_id: usize,
 /// }
 ///
-/// def_task_ext!(TaskExtImpl, TaskExtImpl { proc_id: 0 });
+/// def_task_ext!(TaskExtImpl);
 ///
-/// let task = axtask::spawn(|| {});
-/// assert_eq!(task.task_ext().proc_id, 0);
+/// axtask::init_scheduler();
+///
+/// let mut inner = TaskInner::new(|| {},  "".into(), 0x1000);
+/// inner.init_task_ext(TaskExtImpl { proc_id: 233 });
+/// let task = axtask::spawn_task(inner);
+/// assert_eq!(task.task_ext().proc_id, 233);
 /// ```
 ///
 /// [`TaskInner`]: crate::TaskInner
 #[macro_export]
 macro_rules! def_task_ext {
-    ($task_ext_struct:ty, $default:expr) => {
+    ($task_ext_struct:ty) => {
         #[no_mangle]
-        #[link_section = "ax_task_ext"]
-        static __AX_TASK_EXT: $task_ext_struct = $default;
+        static __AX_TASK_EXT_SIZE: usize = ::core::mem::size_of::<$task_ext_struct>();
+
+        #[no_mangle]
+        static __AX_TASK_EXT_ALIGN: usize = ::core::mem::align_of::<$task_ext_struct>();
 
         impl $crate::TaskExtRef<$task_ext_struct> for $crate::TaskInner {
             fn task_ext(&self) -> &$task_ext_struct {

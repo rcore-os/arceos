@@ -1,5 +1,16 @@
+use alloc::sync::Arc;
+
 use axhal::arch::UspaceContext;
+use axsync::Mutex;
 use memory_addr::PhysAddr;
+
+pub struct AddrSpace(pub PhysAddr);
+
+impl AddrSpace {
+    pub fn page_table_root(&self) -> PhysAddr {
+        self.0
+    }
+}
 
 /// Task extended data for the monolithic kernel.
 pub struct TaskExt {
@@ -7,19 +18,18 @@ pub struct TaskExt {
     pub proc_id: usize,
     /// The user space context.
     pub uctx: UspaceContext,
-    /// The root of the page table.
-    pub page_table_root: PhysAddr,
+    /// The virtual memory address space.
+    pub aspace: Arc<Mutex<AddrSpace>>,
 }
 
 impl TaskExt {
-    /// Creates an empty [`TaskExt`] for initialization.
-    const fn default() -> Self {
+    pub const fn new(uctx: UspaceContext, aspace: Arc<Mutex<AddrSpace>>) -> Self {
         Self {
             proc_id: 233,
-            uctx: UspaceContext::empty(),
-            page_table_root: PhysAddr::from(0),
+            uctx,
+            aspace,
         }
     }
 }
 
-axtask::def_task_ext!(TaskExt, TaskExt::default());
+axtask::def_task_ext!(TaskExt);

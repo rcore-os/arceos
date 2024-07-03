@@ -88,6 +88,29 @@ unsafe impl Send for TaskInner {}
 unsafe impl Sync for TaskInner {}
 
 impl TaskInner {
+    /// Create a new task with the given entry function and stack size.
+    pub fn new<F>(entry: F, name: String, stack_size: usize) -> Self
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let mut t = Self::new_common(TaskId::new(), name);
+        debug!("new task: {}", t.id_name());
+        let kstack = TaskStack::alloc(align_up_4k(stack_size));
+
+        #[cfg(feature = "tls")]
+        let tls = VirtAddr::from(t.tls.tls_ptr() as usize);
+        #[cfg(not(feature = "tls"))]
+        let tls = VirtAddr::from(0);
+
+        t.entry = Some(Box::into_raw(Box::new(entry)));
+        t.ctx_mut().init(task_entry as usize, kstack.top(), tls);
+        t.kstack = Some(kstack);
+        if t.name == "idle" {
+            t.is_idle = true;
+        }
+        t
+    }
+
     /// Gets the ID of the task.
     pub const fn id(&self) -> TaskId {
         self.id
@@ -124,6 +147,11 @@ impl TaskInner {
     pub unsafe fn task_ext_ptr(&self) -> *mut u8 {
         self.task_ext.as_ptr()
     }
+
+    /// Initialize the user-defined task extended data.
+    pub fn init_task_ext<T: Sized>(&mut self, data: T) {
+        self.task_ext.init(data);
+    }
 }
 
 // private methods
@@ -147,33 +175,10 @@ impl TaskInner {
             wait_for_exit: WaitQueue::new(),
             kstack: None,
             ctx: UnsafeCell::new(TaskContext::new()),
-            task_ext: AxTaskExt::alloc(),
+            task_ext: AxTaskExt::null(),
             #[cfg(feature = "tls")]
             tls: TlsArea::alloc(),
         }
-    }
-
-    /// Create a new task with the given entry function and stack size.
-    pub fn new<F>(entry: F, name: String, stack_size: usize) -> Self
-    where
-        F: FnOnce() + Send + 'static,
-    {
-        let mut t = Self::new_common(TaskId::new(), name);
-        debug!("new task: {}", t.id_name());
-        let kstack = TaskStack::alloc(align_up_4k(stack_size));
-
-        #[cfg(feature = "tls")]
-        let tls = VirtAddr::from(t.tls.tls_ptr() as usize);
-        #[cfg(not(feature = "tls"))]
-        let tls = VirtAddr::from(0);
-
-        t.entry = Some(Box::into_raw(Box::new(entry)));
-        t.ctx_mut().init(task_entry as usize, kstack.top(), tls);
-        t.kstack = Some(kstack);
-        if t.name == "idle" {
-            t.is_idle = true;
-        }
-        t
     }
 
     /// Creates an "init task" using the current CPU states, to use as the

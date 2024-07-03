@@ -29,11 +29,6 @@ SECTIONS
         _sdata = .;
         *(.data.boot_page_table)
         . = ALIGN(4K);
-
-        __start_ax_task_ext = .;
-        *(ax_task_ext)
-        __stop_ax_task_ext = .;
-
         *(.data .data.*)
         *(.sdata .sdata.*)
         *(.got .got.*)

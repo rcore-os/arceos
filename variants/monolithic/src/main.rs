@@ -8,13 +8,17 @@ extern crate axstd;
 
 mod task;
 
-use memory_addr::{PhysAddr, VirtAddr};
+use alloc::sync::Arc;
 
 use axhal::arch::{TrapFrame, UspaceContext};
 use axhal::mem::virt_to_phys;
 use axhal::paging::MappingFlags;
 use axruntime::KERNEL_PAGE_TABLE;
-use axtask::{AxTaskRef, TaskExtMut, TaskExtRef, TaskInner};
+use axsync::Mutex;
+use axtask::{AxTaskRef, TaskExtRef, TaskInner};
+use memory_addr::VirtAddr;
+
+use self::task::{AddrSpace, TaskExt};
 
 const USER_STACK_SIZE: usize = 4096;
 const KERNEL_STACK_SIZE: usize = 0x40000; // 256 KiB
@@ -37,7 +41,7 @@ fn app_main(arg0: usize) {
     }
 }
 
-fn spawn_user_task(page_table_root: PhysAddr, uctx: UspaceContext) -> AxTaskRef {
+fn spawn_user_task(aspace: Arc<Mutex<AddrSpace>>, uctx: UspaceContext) -> AxTaskRef {
     let mut task = TaskInner::new(
         || {
             let curr = axtask::current();
@@ -53,18 +57,18 @@ fn spawn_user_task(page_table_root: PhysAddr, uctx: UspaceContext) -> AxTaskRef 
         "".into(),
         KERNEL_STACK_SIZE,
     );
-    task.task_ext_mut().page_table_root = page_table_root;
-    task.task_ext_mut().uctx = uctx;
-    task.ctx_mut().set_page_table_root(page_table_root);
+    task.ctx_mut()
+        .set_page_table_root(aspace.lock().page_table_root());
+    task.init_task_ext(TaskExt::new(uctx, aspace));
     axtask::spawn_task(task)
 }
 
 fn sys_clone(tf: &TrapFrame, newsp: usize) -> usize {
-    let page_table_root = axtask::current().task_ext().page_table_root;
+    let aspace = axtask::current().task_ext().aspace.clone();
     let mut uctx = UspaceContext::from(tf);
     uctx.set_sp(newsp);
     uctx.set_ret_reg(0);
-    let new_task = spawn_user_task(page_table_root, uctx);
+    let new_task = spawn_user_task(aspace, uctx);
     new_task.id().as_u64() as usize
 }
 
@@ -104,7 +108,7 @@ fn run_apps() -> ! {
     .unwrap();
 
     spawn_user_task(
-        pt.root_paddr(),
+        Arc::new(Mutex::new(AddrSpace(pt.root_paddr()))),
         UspaceContext::new(entry_vaddr.into(), ustack_top, 2333),
     );
 
